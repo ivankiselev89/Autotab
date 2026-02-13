@@ -14,6 +14,7 @@ class _RecordScreenState extends State<RecordScreen> {
   String selectedInstrument = 'Guitar';
   final List<String> instruments = ['Guitar', 'Piano', 'Drums', 'Violin'];
   bool isRecording = false;
+  final AudioService audioService = AudioService();
 
   @override
   Widget build(BuildContext context) {
@@ -74,7 +75,6 @@ class _RecordScreenState extends State<RecordScreen> {
               children: [
                 ElevatedButton.icon(
                   onPressed: () async {
-                    final audioService = AudioService();
                     if (isRecording) {
                       await audioService.stopRecording();
                       setState(() {
@@ -104,6 +104,7 @@ class _RecordScreenState extends State<RecordScreen> {
                 ElevatedButton.icon(
                   onPressed: isRecording ? null : () {
                     final appStateProvider = Provider.of<AppStateProvider>(context, listen: false);
+                    final currentContext = context;
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -111,13 +112,15 @@ class _RecordScreenState extends State<RecordScreen> {
                           initialText: 'Sample transcription for $selectedInstrument at $bpm BPM',
                           onSave: (text) {
                             appStateProvider.addTranscription(text);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Transcription saved')),
-                            );
                           },
                         ),
                       ),
-                    );
+                    ).then((_) {
+                      // Show snackbar after returning from edit screen
+                      ScaffoldMessenger.of(currentContext).showSnackBar(
+                        SnackBar(content: Text('Transcription saved')),
+                      );
+                    });
                   },
                   icon: Icon(Icons.edit),
                   label: Text('Edit'),
