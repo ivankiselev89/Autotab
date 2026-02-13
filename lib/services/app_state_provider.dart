@@ -19,6 +19,13 @@ class AppStateProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void removeTranscription(int index) {
+    if (index >= 0 && index < _transcriptions.length) {
+      _transcriptions.removeAt(index);
+      notifyListeners();
+    }
+  }
+
   void setCurrentTranscription(String transcription) {
     _currentTranscription = transcription;
     notifyListeners();

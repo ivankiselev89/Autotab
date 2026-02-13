@@ -14,7 +14,6 @@ class _RecordScreenState extends State<RecordScreen> {
   String selectedInstrument = 'Guitar';
   final List<String> instruments = ['Guitar', 'Piano', 'Drums', 'Violin'];
   bool isRecording = false;
-  final AudioService _audioService = AudioService();
 
   @override
   Widget build(BuildContext context) {
@@ -75,8 +74,9 @@ class _RecordScreenState extends State<RecordScreen> {
               children: [
                 ElevatedButton.icon(
                   onPressed: () async {
+                    final audioService = AudioService();
                     if (isRecording) {
-                      await _audioService.stopRecording();
+                      await audioService.stopRecording();
                       setState(() {
                         isRecording = false;
                       });
@@ -84,7 +84,7 @@ class _RecordScreenState extends State<RecordScreen> {
                         SnackBar(content: Text('Recording stopped')),
                       );
                     } else {
-                      await _audioService.startRecording();
+                      await audioService.startRecording();
                       setState(() {
                         isRecording = true;
                       });
@@ -103,14 +103,14 @@ class _RecordScreenState extends State<RecordScreen> {
                 SizedBox(width: 20),
                 ElevatedButton.icon(
                   onPressed: isRecording ? null : () {
+                    final appStateProvider = Provider.of<AppStateProvider>(context, listen: false);
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => EditScreen(
                           initialText: 'Sample transcription for $selectedInstrument at $bpm BPM',
                           onSave: (text) {
-                            Provider.of<AppStateProvider>(context, listen: false)
-                                .addTranscription(text);
+                            appStateProvider.addTranscription(text);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('Transcription saved')),
                             );

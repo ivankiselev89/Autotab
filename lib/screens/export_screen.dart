@@ -75,8 +75,9 @@ class ExportScreen extends StatelessWidget {
                               trailing: IconButton(
                                 icon: Icon(Icons.delete),
                                 onPressed: () {
+                                  appState.removeTranscription(index);
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Delete functionality coming soon')),
+                                    SnackBar(content: Text('Transcription deleted')),
                                   );
                                 },
                               ),
