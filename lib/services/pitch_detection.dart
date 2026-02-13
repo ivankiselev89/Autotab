@@ -100,7 +100,14 @@ class PitchDetectionService {
         final s2 = yinBuffer[tauEstimate + 1];
 
         // Parabolic interpolation formula
-        final adjustment = (s2 - s0) / (2 * (2 * s1 - s2 - s0));
+        final denominator = 2 * (2 * s1 - s2 - s0);
+        
+        // Avoid division by zero when points form a horizontal line
+        if (denominator.abs() < 1e-10) {
+            return tauEstimate.toDouble();
+        }
+        
+        final adjustment = (s2 - s0) / denominator;
         
         return tauEstimate + adjustment;
     }
