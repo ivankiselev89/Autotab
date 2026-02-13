@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 class PitchDetectionService {
     // Define frequency ranges for different instruments
     static const Map<String, List<double>> frequencyRanges = {
@@ -50,7 +48,6 @@ class PitchDetectionService {
     /// Step 1: Calculate the difference function
     /// d_t(tau) = sum of squared differences
     void _differenceFunction(List<double> buffer, List<double> yinBuffer) {
-        final bufferSize = buffer.length;
         final yinBufferSize = yinBuffer.length;
 
         for (int tau = 0; tau < yinBufferSize; tau++) {
@@ -111,7 +108,7 @@ class PitchDetectionService {
     /// Checks if the detected pitch falls within a specific instrument range
     bool isPitchInRange(String instrument, double pitch) {
         if (frequencyRanges.containsKey(instrument)) {
-            final range = frequencyRanges[instrument];
+            final range = frequencyRanges[instrument]!;
             return pitch >= range[0] && pitch <= range[1];
         }
         return false;
