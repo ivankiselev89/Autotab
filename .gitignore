@@ -1,0 +1,18 @@
+# Flutter/Dart
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.pyo
+*.swp
+*~
+.idea/
+.vscode/
+.DS_Store
+
+# Flutter build files
+/build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
