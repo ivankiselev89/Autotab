@@ -1,40 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'screens/home_screen.dart';
+import 'services/app_state_provider.dart';
 
 void main() {
-  runApp(MyApp());
+  runApp(AutotabApp());
 }
 
-class MyApp extends StatelessWidget {
+class AutotabApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (context) => MyModel(),
+      create: (context) => AppStateProvider(),
       child: MaterialApp(
-        title: 'Flutter Demo',
+        title: 'Autotab - Music Transcription',
         theme: ThemeData(
           primarySwatch: Colors.blue,
+          visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-        home: MyHomePage(),
+        home: HomeScreen(),
       ),
     );
   }
-}
-
-class MyHomePage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Home Page'),
-      ),
-      body: Center(
-        child: Text('Hello, Flutter with Provider!'),
-      ),
-    );
-  }
-}
-
-class MyModel with ChangeNotifier {
-  // Your state management logic here
 }
