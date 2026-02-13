@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'record_screen.dart';
+import 'export_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   @override
@@ -12,6 +14,12 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
+            Icon(
+              Icons.music_note,
+              size: 80,
+              color: Colors.blue,
+            ),
+            SizedBox(height: 20),
             Text(
               'Welcome to Autotab',
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
@@ -22,15 +30,34 @@ class HomeScreen extends StatelessWidget {
               style: TextStyle(fontSize: 16),
             ),
             SizedBox(height: 40),
-            ElevatedButton(
+            ElevatedButton.icon(
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Navigate to Record Screen'),
-                  ),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => RecordScreen()),
                 );
               },
-              child: Text('Start Recording'),
+              icon: Icon(Icons.mic),
+              label: Text('Start Recording'),
+              style: ElevatedButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                textStyle: TextStyle(fontSize: 18),
+              ),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ExportScreen()),
+                );
+              },
+              icon: Icon(Icons.file_download),
+              label: Text('View Exports'),
+              style: ElevatedButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                textStyle: TextStyle(fontSize: 18),
+              ),
             ),
           ],
         ),
