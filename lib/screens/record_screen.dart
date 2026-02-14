@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'dart:async';
 import '../services/audio_service.dart';
 import '../services/app_state_provider.dart';
+import '../services/tab_generator.dart';
+import '../models/note.dart';
 import 'edit_screen.dart';
 import 'export_screen.dart';
 
@@ -17,6 +19,7 @@ class _RecordScreenState extends State<RecordScreen> {
   final List<String> instruments = ['Guitar', 'Piano', 'Drums', 'Violin'];
   bool isRecording = false;
   final AudioService audioService = AudioService();
+  final TabGeneratorService tabGenerator = TabGeneratorService();
   double currentAudioLevel = 0.0;
   StreamSubscription<double>? _audioLevelSubscription;
 
@@ -233,6 +236,14 @@ class _RecordScreenState extends State<RecordScreen> {
     final now = DateTime.now();
     final timestamp = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
                       '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+    
+    // Generate sample notes to simulate recording
+    List<Note> sampleNotes = _generateSampleNotes();
+    
+    // Use TabGeneratorService to generate tabs from notes
+    String generatedTab = tabGenerator.generateTab(sampleNotes);
+    String textNotation = tabGenerator.generateTextNotation(sampleNotes);
+    
     return '''
 Recording Details:
 Timestamp: $timestamp
@@ -240,15 +251,60 @@ Instrument: $selectedInstrument
 BPM: ${bpm.toStringAsFixed(0)}
 
 Generated Tablature:
-E|--0--2--3--2--0--|
-B|--3--3--3--3--3--|
-G|--2--2--2--2--2--|
-D|--0--0--0--0--0--|
-A|-----------------|
-E|-----------------|
+$generatedTab
 
-Notes: This is a sample transcription. The actual audio processing would generate real tablature based on pitch detection and note segmentation.
+$textNotation
+
+Notes: This transcription was generated using the TabGeneratorService with sample notes.
 ''';
+  }
+  
+  // Generate sample notes to simulate a recording
+  List<Note> _generateSampleNotes() {
+    // Create a simple melody with sample notes
+    // Simulating a recording with some common guitar frequencies
+    return [
+      Note(
+        frequency: 196,    // G3 (196.00 Hz)
+        noteName: 'G',
+        octave: 3,
+        startTime: 0.0,
+        endTime: 0.5,
+        confidence: 0.95,
+      ),
+      Note(
+        frequency: 220,    // A3 (220.00 Hz)
+        noteName: 'A',
+        octave: 3,
+        startTime: 0.5,
+        endTime: 1.0,
+        confidence: 0.92,
+      ),
+      Note(
+        frequency: 247,    // B3 (~246.94 Hz, rounded to nearest int)
+        noteName: 'B',
+        octave: 3,
+        startTime: 1.0,
+        endTime: 1.5,
+        confidence: 0.93,
+      ),
+      Note(
+        frequency: 220,    // A3 (220.00 Hz)
+        noteName: 'A',
+        octave: 3,
+        startTime: 1.5,
+        endTime: 2.0,
+        confidence: 0.91,
+      ),
+      Note(
+        frequency: 196,    // G3 (196.00 Hz)
+        noteName: 'G',
+        octave: 3,
+        startTime: 2.0,
+        endTime: 2.5,
+        confidence: 0.94,
+      ),
+    ];
   }
 }
 
