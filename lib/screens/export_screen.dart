@@ -297,12 +297,32 @@ class _ExportScreenState extends State<ExportScreen> {
                                   IconButton(
                                     icon: Icon(Icons.delete, color: Colors.red),
                                     onPressed: () {
-                                      // Clear text if deleting selected item
+                                      // If deleting selected item, select next available transcription
                                       if (isSelected) {
-                                        _textController.clear();
-                                        _selectedTranscription = null;
+                                        // Remove the transcription first
+                                        appState.removeTranscription(index);
+                                        
+                                        // Select next available transcription
+                                        if (appState.transcriptions.isNotEmpty) {
+                                          // Try to select the same index, or the previous one if we deleted the last item
+                                          final newIndex = index < appState.transcriptions.length ? index : appState.transcriptions.length - 1;
+                                          final nextTranscription = appState.transcriptions[newIndex];
+                                          setState(() {
+                                            _selectedTranscription = nextTranscription;
+                                            _textController.text = nextTranscription;
+                                          });
+                                        } else {
+                                          // No transcriptions left, clear selection
+                                          setState(() {
+                                            _textController.clear();
+                                            _selectedTranscription = null;
+                                          });
+                                        }
+                                      } else {
+                                        // Not selected, just remove it
+                                        appState.removeTranscription(index);
                                       }
-                                      appState.removeTranscription(index);
+                                      
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
                                           content: Text('Transcription deleted'),

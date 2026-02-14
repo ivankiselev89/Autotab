@@ -78,6 +78,9 @@ class AudioService {
     print('Playback stopped.');
   }
 
+  // Note: This singleton service persists for the app's lifetime.
+  // The dispose method is provided for completeness but must be called
+  // manually if cleanup is required during app shutdown.
   void dispose() {
     _audioLevelTimer?.cancel();
     _audioLevelController.close();

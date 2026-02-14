@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import '../services/audio_service.dart';
 import '../services/app_state_provider.dart';
 import 'edit_screen.dart';
@@ -17,18 +18,25 @@ class _RecordScreenState extends State<RecordScreen> {
   bool isRecording = false;
   final AudioService audioService = AudioService();
   double currentAudioLevel = 0.0;
+  StreamSubscription<double>? _audioLevelSubscription;
 
   @override
   void initState() {
     super.initState();
     // Listen to audio level stream
-    audioService.audioLevelStream.listen((level) {
+    _audioLevelSubscription = audioService.audioLevelStream.listen((level) {
       if (mounted) {
         setState(() {
           currentAudioLevel = level;
         });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _audioLevelSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -140,9 +148,9 @@ class _RecordScreenState extends State<RecordScreen> {
                       
                       // Generate a transcription based on the recording
                       final appStateProvider = Provider.of<AppStateProvider>(context, listen: false);
-                      String transcription = _generateTranscription();
-                      appStateProvider.addTranscription(transcription);
-                      appStateProvider.setCurrentTranscription(transcription);
+                      String newTranscription = _generateTranscription();
+                      appStateProvider.addTranscription(newTranscription);
+                      appStateProvider.setCurrentTranscription(newTranscription);
                       
                       // Navigate to export screen immediately
                       Navigator.push(
