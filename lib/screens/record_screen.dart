@@ -281,7 +281,7 @@ Notes: This transcription was generated using the TabGeneratorService with sampl
         confidence: 0.92,
       ),
       Note(
-        frequency: 247,    // B3 (246.94 Hz)
+        frequency: 247,    // B3 (~246.94 Hz, rounded to nearest int)
         noteName: 'B',
         octave: 3,
         startTime: 1.0,
