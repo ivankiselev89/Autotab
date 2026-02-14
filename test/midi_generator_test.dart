@@ -5,13 +5,11 @@ import 'dart:io';
 
 void main() {
   group('MidiGeneratorService', () {
-    final testDir = Directory('/tmp/midi_tests');
+    late Directory testDir;
 
     setUpAll(() async {
-      // Create test directory
-      if (!await testDir.exists()) {
-        await testDir.create(recursive: true);
-      }
+      // Create test directory using platform-independent temp directory
+      testDir = await Directory.systemTemp.createTemp('midi_tests_');
     });
 
     tearDownAll(() async {

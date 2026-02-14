@@ -1,4 +1,5 @@
 import '../models/note.dart';
+import 'dart:math' as math;
 
 class TabGeneratorService {
   // Guitar tuning (standard tuning: E A D G B E)
@@ -118,7 +119,7 @@ class TabGeneratorService {
       
       // Try each fret on this string
       for (int fret = 0; fret <= maxFret; fret++) {
-        final fretFreq = openStringFreq * pow(fretRatio, fret);
+        final fretFreq = openStringFreq * math.pow(fretRatio, fret);
         final difference = (frequency - fretFreq).abs();
         
         // Find closest match
@@ -135,14 +136,5 @@ class TabGeneratorService {
     }
     
     return null;
-  }
-  
-  /// Helper function to calculate power
-  double pow(double base, int exponent) {
-    double result = 1.0;
-    for (int i = 0; i < exponent; i++) {
-      result *= base;
-    }
-    return result;
   }
 }

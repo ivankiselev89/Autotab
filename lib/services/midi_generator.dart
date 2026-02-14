@@ -78,8 +78,8 @@ class MidiGeneratorService {
     // Convert notes to MIDI events
     int lastTicks = 0;
     for (final note in sortedNotes) {
-      final startTicks = _secondsToTicks(note.startTime);
-      final endTicks = _secondsToTicks(note.endTime);
+      final startTicks = _secondsToTicks(note.startTime, bpm);
+      final endTicks = _secondsToTicks(note.endTime, bpm);
       final duration = endTicks - startTicks;
       
       // Delta time from last event
@@ -190,11 +190,10 @@ class MidiGeneratorService {
   }
   
   /// Converts seconds to MIDI ticks (using 480 ticks per quarter note)
-  static int _secondsToTicks(double seconds) {
+  static int _secondsToTicks(double seconds, int bpm) {
     const ticksPerQuarterNote = 480;
-    const bpm = 120; // Default BPM for timing calculations
-    const secondsPerBeat = 60.0 / bpm;
-    const ticksPerSecond = ticksPerQuarterNote / secondsPerBeat;
+    final secondsPerBeat = 60.0 / bpm;
+    final ticksPerSecond = ticksPerQuarterNote / secondsPerBeat;
     
     return (seconds * ticksPerSecond).round();
   }
