@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -9,6 +10,13 @@ class AudioService {
   // Singleton instance
   static final AudioService _instance = AudioService._();
   factory AudioService() => _instance;
+
+  // Stream controller for audio levels
+  final StreamController<double> _audioLevelController = StreamController<double>.broadcast();
+  Stream<double> get audioLevelStream => _audioLevelController.stream;
+  
+  Timer? _audioLevelTimer;
+  bool _isRecording = false;
 
   // Method to check and request microphone permission
   Future<bool> _requestMicrophonePermission() async {
@@ -25,16 +33,34 @@ class AudioService {
     if (await _requestMicrophonePermission()) {
       // Implement the logic to start recording
       // For example: await recorder.start();
+      _isRecording = true;
+      _startAudioLevelSimulation();
       print('Recording started...');
     } else {
       print('Microphone permission denied.');
     }
   }
 
+  // Simulate audio levels for visualization
+  void _startAudioLevelSimulation() {
+    _audioLevelTimer?.cancel();
+    _audioLevelTimer = Timer.periodic(Duration(milliseconds: 100), (timer) {
+      if (_isRecording) {
+        // Generate random audio level for demonstration
+        final random = Random();
+        final level = 0.2 + random.nextDouble() * 0.6; // Range: 0.2 to 0.8
+        _audioLevelController.add(level);
+      }
+    });
+  }
+
   // Method to stop recording
   Future<void> stopRecording() async {
     // Implement the logic to stop recording
     // For example: await recorder.stop();
+    _isRecording = false;
+    _audioLevelTimer?.cancel();
+    _audioLevelController.add(0.0);
     print('Recording stopped.');
   }
 
@@ -50,5 +76,15 @@ class AudioService {
     // Implement the logic to stop playback
     // For example: await audioPlayer.stop();
     print('Playback stopped.');
+  }
+
+  // Note: This is a singleton service that persists for the app's lifetime.
+  // The dispose method is provided for potential cleanup during app termination
+  // but is typically not called in normal Flutter app usage. In scenarios where
+  // explicit cleanup is needed (e.g., when monitoring AppLifecycleState.detached),
+  // this method can be called manually to cancel timers and close streams.
+  void dispose() {
+    _audioLevelTimer?.cancel();
+    _audioLevelController.close();
   }
 }
