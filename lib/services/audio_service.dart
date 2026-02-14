@@ -78,9 +78,11 @@ class AudioService {
     print('Playback stopped.');
   }
 
-  // Note: This singleton service persists for the app's lifetime.
-  // The dispose method is provided for completeness but must be called
-  // manually if cleanup is required during app shutdown.
+  // Note: This is a singleton service that persists for the app's lifetime.
+  // The dispose method is provided for potential cleanup during app termination
+  // but is typically not called in normal Flutter app usage. In scenarios where
+  // explicit cleanup is needed (e.g., when monitoring AppLifecycleState.detached),
+  // this method can be called manually to cancel timers and close streams.
   void dispose() {
     _audioLevelTimer?.cancel();
     _audioLevelController.close();

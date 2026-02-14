@@ -230,7 +230,9 @@ class _RecordScreenState extends State<RecordScreen> {
   
   // Generate a mock transcription based on recording parameters
   String _generateTranscription() {
-    final timestamp = DateTime.now().toString().split('.')[0];
+    final now = DateTime.now();
+    final timestamp = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
+                      '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
     return '''
 Recording Details:
 Timestamp: $timestamp

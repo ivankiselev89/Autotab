@@ -304,8 +304,10 @@ class _ExportScreenState extends State<ExportScreen> {
                                         
                                         // Select next available transcription
                                         if (appState.transcriptions.isNotEmpty) {
-                                          // Try to select the same index, or the previous one if we deleted the last item
-                                          final newIndex = index < appState.transcriptions.length ? index : appState.transcriptions.length - 1;
+                                          // Calculate new index: use current index if available, otherwise use last index
+                                          final newIndex = index < appState.transcriptions.length 
+                                              ? index 
+                                              : appState.transcriptions.length - 1;
                                           final nextTranscription = appState.transcriptions[newIndex];
                                           setState(() {
                                             _selectedTranscription = nextTranscription;
