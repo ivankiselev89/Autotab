@@ -265,7 +265,7 @@ Notes: This transcription was generated using the TabGeneratorService with sampl
     // Simulating a recording with some common guitar frequencies
     return [
       Note(
-        frequency: 196,    // G3
+        frequency: 196,    // G3 (196.00 Hz)
         noteName: 'G',
         octave: 3,
         startTime: 0.0,
@@ -273,7 +273,7 @@ Notes: This transcription was generated using the TabGeneratorService with sampl
         confidence: 0.95,
       ),
       Note(
-        frequency: 220,    // A3
+        frequency: 220,    // A3 (220.00 Hz)
         noteName: 'A',
         octave: 3,
         startTime: 0.5,
@@ -281,7 +281,7 @@ Notes: This transcription was generated using the TabGeneratorService with sampl
         confidence: 0.92,
       ),
       Note(
-        frequency: 246,    // B3
+        frequency: 247,    // B3 (246.94 Hz)
         noteName: 'B',
         octave: 3,
         startTime: 1.0,
@@ -289,7 +289,7 @@ Notes: This transcription was generated using the TabGeneratorService with sampl
         confidence: 0.93,
       ),
       Note(
-        frequency: 220,    // A3
+        frequency: 220,    // A3 (220.00 Hz)
         noteName: 'A',
         octave: 3,
         startTime: 1.5,
@@ -297,7 +297,7 @@ Notes: This transcription was generated using the TabGeneratorService with sampl
         confidence: 0.91,
       ),
       Note(
-        frequency: 196,    // G3
+        frequency: 196,    // G3 (196.00 Hz)
         noteName: 'G',
         octave: 3,
         startTime: 2.0,
