@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/app_state_provider.dart';
+import '../services/export_service.dart';
+import '../models/note.dart';
 
 class ExportScreen extends StatefulWidget {
   @override
@@ -10,6 +12,7 @@ class ExportScreen extends StatefulWidget {
 
 class _ExportScreenState extends State<ExportScreen> {
   final TextEditingController _textController = TextEditingController();
+  final ExportService _exportService = ExportService();
   String? _selectedTranscription;
 
   @override
@@ -128,13 +131,46 @@ class _ExportScreenState extends State<ExportScreen> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4.0),
                             child: ElevatedButton.icon(
-                              onPressed: _textController.text.isEmpty ? null : () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Exporting as MIDI...'),
-                                    backgroundColor: Colors.blue,
-                                  ),
-                                );
+                              onPressed: _textController.text.isEmpty ? null : () async {
+                                try {
+                                  // Get actual notes from app state
+                                  final appState = Provider.of<AppStateProvider>(context, listen: false);
+                                  final notes = appState.currentNotes.isNotEmpty 
+                                    ? appState.currentNotes 
+                                    : appState.getNotesForTranscription(_textController.text);
+                                  
+                                  if (notes.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('No notes available for export. Please record audio first.'),
+                                        backgroundColor: Colors.orange,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  
+                                  final fileName = 'autotab_midi_${DateTime.now().millisecondsSinceEpoch}';
+                                  final filePath = await _exportService.exportAsMidi(
+                                    notes,
+                                    fileName,
+                                    bpm: 120,
+                                  );
+                                  
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('MIDI exported to: $filePath'),
+                                      backgroundColor: Colors.green,
+                                      duration: Duration(seconds: 4),
+                                    ),
+                                  );
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error exporting MIDI: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
                               },
                               icon: Icon(Icons.music_note),
                               label: Text('MIDI'),
@@ -151,13 +187,45 @@ class _ExportScreenState extends State<ExportScreen> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4.0),
                             child: ElevatedButton.icon(
-                              onPressed: _textController.text.isEmpty ? null : () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Exporting as Tabs...'),
-                                    backgroundColor: Colors.blue,
-                                  ),
-                                );
+                              onPressed: _textController.text.isEmpty ? null : () async {
+                                try {
+                                  // Get actual notes from app state
+                                  final appState = Provider.of<AppStateProvider>(context, listen: false);
+                                  final notes = appState.currentNotes.isNotEmpty 
+                                    ? appState.currentNotes 
+                                    : appState.getNotesForTranscription(_textController.text);
+                                  
+                                  if (notes.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('No notes available for export. Please record audio first.'),
+                                        backgroundColor: Colors.orange,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  
+                                  final fileName = 'autotab_tabs_${DateTime.now().millisecondsSinceEpoch}';
+                                  final filePath = await _exportService.exportAsTab(
+                                    notes,
+                                    fileName,
+                                  );
+                                  
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Tab exported to: $filePath'),
+                                      backgroundColor: Colors.green,
+                                      duration: Duration(seconds: 4),
+                                    ),
+                                  );
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error exporting tab: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
                               },
                               icon: Icon(Icons.library_music),
                               label: Text('Tabs'),
@@ -174,16 +242,32 @@ class _ExportScreenState extends State<ExportScreen> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4.0),
                             child: ElevatedButton.icon(
-                              onPressed: _textController.text.isEmpty ? null : () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Exporting as PDF...'),
-                                    backgroundColor: Colors.blue,
-                                  ),
-                                );
+                              onPressed: _textController.text.isEmpty ? null : () async {
+                                try {
+                                  final fileName = 'autotab_text_${DateTime.now().millisecondsSinceEpoch}';
+                                  final filePath = await _exportService.exportTranscriptionText(
+                                    _textController.text,
+                                    fileName,
+                                  );
+                                  
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Text exported to: $filePath'),
+                                      backgroundColor: Colors.green,
+                                      duration: Duration(seconds: 4),
+                                    ),
+                                  );
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error exporting text: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
                               },
-                              icon: Icon(Icons.picture_as_pdf),
-                              label: Text('PDF'),
+                              icon: Icon(Icons.text_snippet),
+                              label: Text('Text'),
                               style: ElevatedButton.styleFrom(
                                 padding: EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(
@@ -336,6 +420,10 @@ class _ExportScreenState extends State<ExportScreen> {
                                 ],
                               ),
                               onTap: () {
+                                // Update current transcription and load its notes
+                                final notes = appState.getNotesForTranscription(transcription);
+                                appState.setCurrentTranscription(transcription, notes: notes);
+                                
                                 setState(() {
                                   _selectedTranscription = transcription;
                                   _textController.text = transcription;

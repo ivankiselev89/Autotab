@@ -150,7 +150,7 @@ class NoteSegmentationService {
     final midiNote = (12 * (math.log(frequency / a4Frequency) / math.log(2)) + a4MidiNote).round();
     
     // Calculate octave and note within octave
-    final octave = (midiNote / 12) - 1;
+    final octave = (midiNote ~/ 12) - 1; // Use integer division
     final noteIndex = midiNote % 12;
     
     // Note names

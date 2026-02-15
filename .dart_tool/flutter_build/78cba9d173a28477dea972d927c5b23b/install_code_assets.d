@@ -1,0 +1,1 @@
+ C:\\Scripts\\Autotab\\.dart_tool\\flutter_build\\78cba9d173a28477dea972d927c5b23b\\native_assets.json: 

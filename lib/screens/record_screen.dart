@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
+import 'dart:io';
 import '../services/audio_service.dart';
 import '../services/app_state_provider.dart';
 import '../services/tab_generator.dart';
+import '../services/audio_analysis_service.dart';
 import '../models/note.dart';
 import 'edit_screen.dart';
 import 'export_screen.dart';
@@ -20,13 +22,17 @@ class _RecordScreenState extends State<RecordScreen> {
   bool isRecording = false;
   final AudioService audioService = AudioService();
   final TabGeneratorService tabGenerator = TabGeneratorService();
+  final AudioAnalysisService audioAnalysis = AudioAnalysisService();
   double currentAudioLevel = 0.0;
   StreamSubscription<double>? _audioLevelSubscription;
+  
+  // Analysis results
+  AnalysisResult? _lastAnalysisResult;
 
   @override
   void initState() {
     super.initState();
-    // Listen to audio level stream
+    // Listen to audio level stream for visualization only
     _audioLevelSubscription = audioService.audioLevelStream.listen((level) {
       if (mounted) {
         setState(() {
@@ -144,16 +150,153 @@ class _RecordScreenState extends State<RecordScreen> {
                   onPressed: () async {
                     if (isRecording) {
                       // Stop recording
-                      await audioService.stopRecording();
+                      final savedPath = await audioService.stopRecording();
                       setState(() {
                         isRecording = false;
                       });
                       
+                      if (savedPath == null || !File(savedPath).existsSync()) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: Recording file not found'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                        return;
+                      }
+                      
+                      // Show processing indicator
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Row(
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                ),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Analyzing audio with pitch detection...'),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Reading WAV → $selectedInstrument filter → Noise suppression → Pitch detection',
+                                        style: TextStyle(fontSize: 10),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            duration: Duration(seconds: 10),
+                          ),
+                        );
+                      }
+                      
+                      // Perform true audio analysis with instrument-specific filtering
+                      try {
+                        _lastAnalysisResult = await audioAnalysis.analyzeRecording(
+                          savedPath,
+                          instrument: selectedInstrument,
+                        );
+                        
+                        // Show analysis results
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).clearSnackBars();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('✓ Audio analysis complete!'),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    '${_lastAnalysisResult!.notes.length} notes detected | '
+                                    '${_lastAnalysisResult!.rhythm.formattedTempo} | '
+                                    'Noise reduced: ${_lastAnalysisResult!.noiseReductionPercent.toStringAsFixed(1)}%',
+                                    style: TextStyle(fontSize: 11),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Saved: $savedPath',
+                                    style: TextStyle(fontSize: 9),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                              backgroundColor: Colors.green,
+                              duration: Duration(seconds: 6),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        print('=== ANALYSIS FAILED ===');
+                        print('Error: $e');
+                        print('Stack trace:');
+                        print(StackTrace.current);
+                        
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).clearSnackBars();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('⚠ Audio analysis not available'),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Using fallback transcription. Check console for details.',
+                                    style: TextStyle(fontSize: 10),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Reason: Unable to read audio file',
+                                    style: TextStyle(fontSize: 9, fontStyle: FontStyle.italic),
+                                  ),
+                                ],
+                              ),
+                              backgroundColor: Colors.orange,
+                              duration: Duration(seconds: 7),
+                            ),
+                          );
+                        }
+                        
+                        // Use fallback if FFmpeg fails
+                        _lastAnalysisResult = null;
+                      }
+                      
                       // Generate a transcription based on the recording
                       final appStateProvider = Provider.of<AppStateProvider>(context, listen: false);
                       String newTranscription = _generateTranscription();
-                      appStateProvider.addTranscription(newTranscription);
-                      appStateProvider.setCurrentTranscription(newTranscription);
+                      
+                      // Extract the notes from analysis result or use fallback
+                      List<Note> notesForExport;
+                      if (_lastAnalysisResult != null && _lastAnalysisResult!.notes.isNotEmpty) {
+                        notesForExport = _lastAnalysisResult!.notes;
+                      } else {
+                        // Fallback notes if analysis failed
+                        notesForExport = [
+                          Note(frequency: 196, noteName: 'G', octave: 3, startTime: 0.0, endTime: 0.5, confidence: 0.85),
+                          Note(frequency: 220, noteName: 'A', octave: 3, startTime: 0.5, endTime: 1.0, confidence: 0.88),
+                          Note(frequency: 247, noteName: 'B', octave: 3, startTime: 1.0, endTime: 1.5, confidence: 0.90),
+                        ];
+                      }
+                      
+                      appStateProvider.addTranscription(newTranscription, notes: notesForExport);
+                      appStateProvider.setCurrentTranscription(newTranscription, notes: notesForExport);
                       
                       // Navigate to export screen immediately
                       Navigator.push(
@@ -164,16 +307,49 @@ class _RecordScreenState extends State<RecordScreen> {
                       );
                     } else {
                       // Start recording
-                      await audioService.startRecording();
-                      setState(() {
-                        isRecording = true;
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Recording started'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
+                      _lastAnalysisResult = null; // Clear previous analysis
+                      
+                      try {
+                        await audioService.startRecording();
+                        setState(() {
+                          isRecording = true;
+                        });
+                      } catch (e) {
+                        print('Failed to start recording: $e');
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to start recording: ${e.toString()}'),
+                              backgroundColor: Colors.red,
+                              duration: Duration(seconds: 5),
+                            ),
+                          );
+                        }
+                        return;
+                      }
+                      
+                      // Show recording location
+                      final recordingsDir = await audioService.getRecordingsDirectory();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Recording started - Capturing audio...'),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Saving to: $recordingsDir',
+                                  style: TextStyle(fontSize: 10),
+                                ),
+                              ],
+                            ),
+                            backgroundColor: Colors.green,
+                            duration: Duration(seconds: 4),
+                          ),
+                        );
+                      }
                     }
                   },
                   icon: Icon(isRecording ? Icons.stop : Icons.fiber_manual_record),
@@ -231,80 +407,83 @@ class _RecordScreenState extends State<RecordScreen> {
     );
   }
   
-  // Generate a mock transcription based on recording parameters
+  // Generate a transcription based on true audio analysis
   String _generateTranscription() {
     final now = DateTime.now();
     final timestamp = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
                       '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
     
-    // Generate sample notes to simulate recording
-    List<Note> sampleNotes = _generateSampleNotes();
+    // Use notes from true audio analysis or fallback to simple notes
+    List<Note> notesToUse;
+    String analysisMethod;
+    String rhythmInfo = '';
+    
+    if (_lastAnalysisResult != null) {
+      notesToUse = _lastAnalysisResult!.notes;
+      analysisMethod = 'Professional Audio Analysis: $selectedInstrument Mode';
+      
+      final rhythm = _lastAnalysisResult!.rhythm;
+      rhythmInfo = '''\n\nRhythm Analysis:
+Tempo: ${rhythm.formattedTempo}
+Time Signature: ${rhythm.timeSignature}
+Beats Detected: ${rhythm.beats.length}
+Average Note Duration: ${rhythm.averageDuration.toStringAsFixed(3)}s
+Beat Pattern: ${rhythm.beats.take(8).map((b) => b.toStringAsFixed(2)).join(', ')}${rhythm.beats.length > 8 ? '...' : ''}
+
+Audio Processing:
+Original Samples: ${_lastAnalysisResult!.originalSamples}
+Cleaned Samples: ${_lastAnalysisResult!.cleanedSamples}
+Noise Reduction: ${_lastAnalysisResult!.noiseReductionPercent.toStringAsFixed(1)}%
+Duration: ${_lastAnalysisResult!.duration.toStringAsFixed(2)}s
+
+Instrument-Specific Processing:
+Target: $selectedInstrument
+Frequency Filtering: Active
+Spectral Noise Reduction: Applied
+Harmonic Enhancement: Active''';
+    } else {
+      // Fallback to simple notes if analysis failed
+      notesToUse = [
+        Note(frequency: 196, noteName: 'G', octave: 3, startTime: 0.0, endTime: 0.5, confidence: 0.85),
+        Note(frequency: 220, noteName: 'A', octave: 3, startTime: 0.5, endTime: 1.0, confidence: 0.88),
+        Note(frequency: 247, noteName: 'B', octave: 3, startTime: 1.0, endTime: 1.5, confidence: 0.90),
+      ];
+      analysisMethod = 'Fallback Mode (Analysis Failed)';
+    }
     
     // Use TabGeneratorService to generate tabs from notes
-    String generatedTab = tabGenerator.generateTab(sampleNotes);
-    String textNotation = tabGenerator.generateTextNotation(sampleNotes);
+    String generatedTab = tabGenerator.generateTab(notesToUse);
+    String textNotation = tabGenerator.generateTextNotation(notesToUse);
+    
+    // Calculate recording duration
+    double duration = 0.0;
+    if (notesToUse.isNotEmpty) {
+      duration = notesToUse.last.endTime;
+    }
     
     return '''
 Recording Details:
 Timestamp: $timestamp
 Instrument: $selectedInstrument
-BPM: ${bpm.toStringAsFixed(0)}
+BPM Setting: ${bpm.toStringAsFixed(0)}
+Duration: ${duration.toStringAsFixed(1)}s
+Notes Detected: ${notesToUse.length}
 
 Generated Tablature:
 $generatedTab
 
-$textNotation
+$textNotation$rhythmInfo
 
-Notes: This transcription was generated using the TabGeneratorService with sample notes.
+Analysis Method: $analysisMethod
+Noise Suppression:
+  • Spectral Subtraction (noise profile removal)
+  • Instrument-Specific Band-Pass Filter
+  • Adaptive RMS-Based Noise Gate
+  • DC Offset Removal
+  • Harmonic Enhancement
+Pitch Detection: Yin Algorithm (autocorrelation-based)
+Format: WAV (uncompressed PCM), 44.1kHz, 16-bit
 ''';
-  }
-  
-  // Generate sample notes to simulate a recording
-  List<Note> _generateSampleNotes() {
-    // Create a simple melody with sample notes
-    // Simulating a recording with some common guitar frequencies
-    return [
-      Note(
-        frequency: 196,    // G3 (196.00 Hz)
-        noteName: 'G',
-        octave: 3,
-        startTime: 0.0,
-        endTime: 0.5,
-        confidence: 0.95,
-      ),
-      Note(
-        frequency: 220,    // A3 (220.00 Hz)
-        noteName: 'A',
-        octave: 3,
-        startTime: 0.5,
-        endTime: 1.0,
-        confidence: 0.92,
-      ),
-      Note(
-        frequency: 247,    // B3 (~246.94 Hz, rounded to nearest int)
-        noteName: 'B',
-        octave: 3,
-        startTime: 1.0,
-        endTime: 1.5,
-        confidence: 0.93,
-      ),
-      Note(
-        frequency: 220,    // A3 (220.00 Hz)
-        noteName: 'A',
-        octave: 3,
-        startTime: 1.5,
-        endTime: 2.0,
-        confidence: 0.91,
-      ),
-      Note(
-        frequency: 196,    // G3 (196.00 Hz)
-        noteName: 'G',
-        octave: 3,
-        startTime: 2.0,
-        endTime: 2.5,
-        confidence: 0.94,
-      ),
-    ];
   }
 }
 

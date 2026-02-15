@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'record_screen.dart';
 import 'export_screen.dart';
+import 'recordings_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   @override
@@ -102,6 +103,26 @@ class HomeScreen extends StatelessWidget {
                 },
                 icon: Icon(Icons.file_download, size: 24),
                 label: Text('View Exports'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.deepPurple,
+                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 18),
+                  textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  side: BorderSide(color: Colors.deepPurple, width: 2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+              SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => RecordingsScreen()),
+                  );
+                },
+                icon: Icon(Icons.library_music, size: 24),
+                label: Text('Saved Recordings'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.deepPurple,
                   padding: EdgeInsets.symmetric(horizontal: 40, vertical: 18),
