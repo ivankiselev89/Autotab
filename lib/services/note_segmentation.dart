@@ -9,7 +9,7 @@ class NoteSegmentationService {
   static const double onsetThreshold = 0.1; // Amplitude threshold for note onset
   static const int hopSize = 512; // Number of samples to skip between frames
   static const int frameSize = 2048; // Window size for analysis
-  static const double minNoteDuration = 0.05; // Minimum note duration in seconds
+  static const double minNoteDuration = 0.03; // Minimum note duration in seconds (very short notes allowed)
   
   /// Segments continuous audio into individual notes with timing and frequency information.
   /// 

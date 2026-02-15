@@ -11,7 +11,7 @@ class AudioAnalysisService {
   // Audio processing parameters
   static const int sampleRate = 44100;
   static const double noiseThreshold = 0.02; // Amplitude threshold for noise gate
-  static const double minNoteDuration = 0.1; // Minimum note duration in seconds
+  static const double minNoteDuration = 0.03; // Minimum note duration in seconds (allows very short notes)
   static const int frameSize = 2048;
   static const int hopSize = 512;
 
@@ -22,7 +22,13 @@ class AudioAnalysisService {
   /// 2. Apply aggressive noise suppression with instrument-specific filtering
   /// 3. Detect pitch using Yin algorithm
   /// 4. Segment notes and extract rhythm
-  Future<AnalysisResult> analyzeRecording(String wavFilePath, {String instrument = 'Guitar'}) async {
+  /// 
+  /// [bpm] is used for rhythm normalization but does not discard short notes
+  Future<AnalysisResult> analyzeRecording(
+    String wavFilePath, {
+    String instrument = 'Guitar',
+    double bpm = 120.0,
+  }) async {
     print('=== AUDIO ANALYSIS START ===');
     print('File path: $wavFilePath');
     print('Target instrument: $instrument');
@@ -76,8 +82,8 @@ class AudioAnalysisService {
 
     print('Detected ${notes.length} notes');
 
-    // Step 4: Extract rhythm information
-    final rhythm = _extractRhythm(notes);
+    // Step 4: Extract rhythm information using provided BPM
+    final rhythm = _extractRhythm(notes, bpm: bpm);
 
     return AnalysisResult(
       notes: notes,
@@ -391,29 +397,30 @@ class AudioAnalysisService {
   }
 
   /// Extract rhythm information from detected notes
-  RhythmInfo _extractRhythm(List<Note> notes) {
+  /// Uses provided [bpm] for duration quantization
+  RhythmInfo _extractRhythm(List<Note> notes, {double bpm = 120.0}) {
     if (notes.isEmpty) {
       return RhythmInfo(
         beats: [],
         averageDuration: 0.0,
-        tempo: 0.0,
+        tempo: bpm,
         timeSignature: '4/4',
+        noteDurations: [],
       );
     }
-
-    // Calculate note durations
+    
     final durations = notes.map((n) => n.endTime - n.startTime).toList();
     final averageDuration = durations.reduce((a, b) => a + b) / durations.length;
 
     // Estimate tempo (BPM) from average note duration
     // Assuming quarter note = 1 beat
-    final estimatedTempo = averageDuration > 0 ? 60.0 / averageDuration : 120.0;
+    final estimatedTempo = averageDuration > 0 ? 60.0 / averageDuration : bpm;
 
     // Detect beats (note onsets)
     final beats = notes.map((n) => n.startTime).toList();
 
-    // Quantize durations to common note values
-    final quantizedDurations = durations.map((d) => _quantizeDuration(d)).toList();
+    // Quantize durations to common note values based on provided BPM
+    final quantizedDurations = durations.map((d) => _quantizeDuration(d, bpm: bpm)).toList();
 
     return RhythmInfo(
       beats: beats,
@@ -425,13 +432,20 @@ class AudioAnalysisService {
   }
 
   /// Quantize duration to nearest musical note value
-  String _quantizeDuration(double duration) {
-    // Common note durations at 120 BPM
-    final whole = 2.0;
-    final half = 1.0;
-    final quarter = 0.5;
-    final eighth = 0.25;
-    final sixteenth = 0.125;
+  /// Uses provided [bpm] to calculate note durations
+  /// Note: This is used for normalization only - we keep all detected notes regardless of length
+  String _quantizeDuration(double duration, {double bpm = 120.0}) {
+    // Calculate note durations based on BPM
+    // At 120 BPM: quarter note = 0.5 seconds (60/120)
+    // At any BPM: quarter note = 60/BPM seconds
+    final beatDuration = 60.0 / bpm; // Duration of one quarter note
+    
+    final whole = beatDuration * 4.0;
+    final half = beatDuration * 2.0;
+    final quarter = beatDuration;
+    final eighth = beatDuration / 2.0;
+    final sixteenth = beatDuration / 4.0;
+    final thirtySecond = beatDuration / 8.0;
 
     final options = [
       {'duration': whole, 'name': 'whole'},
@@ -439,9 +453,11 @@ class AudioAnalysisService {
       {'duration': quarter, 'name': 'quarter'},
       {'duration': eighth, 'name': 'eighth'},
       {'duration': sixteenth, 'name': '16th'},
+      {'duration': thirtySecond, 'name': '32nd'},
     ];
 
-    // Find closest match
+    // Find closest match - we normalize to standard durations but keep all notes
+    // Very short notes are preserved and mapped to the closest standard duration
     double minDiff = double.infinity;
     String closest = 'quarter';
 

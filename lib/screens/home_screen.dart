@@ -7,10 +7,20 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('Autotab - Home'),
+        title: Text(
+          'AUTOTAB',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2,
+            fontSize: 24,
+          ),
+        ),
         centerTitle: true,
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: Colors.black,
+        elevation: 0,
+        foregroundColor: Colors.red[600],
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -18,124 +28,243 @@ class HomeScreen extends StatelessWidget {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.deepPurple.withOpacity(0.1),
-              Colors.white,
+              Colors.grey[900]!,
+              Colors.black,
             ],
           ),
         ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Container(
-                padding: EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.withOpacity(0.1),
-                  shape: BoxShape.circle,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+            child: Column(
+              children: <Widget>[
+                // Rock Logo
+                Container(
+                  padding: EdgeInsets.all(25),
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      colors: [
+                        Colors.red[900]!.withOpacity(0.3),
+                        Colors.black,
+                      ],
+                    ),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.red[700]!,
+                      width: 3,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red[900]!.withOpacity(0.5),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.graphic_eq,
+                    size: 80,
+                    color: Colors.red[600],
+                  ),
                 ),
-                child: Icon(
-                  Icons.music_note,
-                  size: 80,
-                  color: Colors.deepPurple,
-                ),
-              ),
-              SizedBox(height: 30),
-              Text(
-                'Welcome to Autotab',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.deepPurple[700],
-                ),
-              ),
-              SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40.0),
-                child: Text(
-                  'Automatic Audio Transcription Tool',
+                SizedBox(height: 30),
+                // Title
+                Text(
+                  'ROCK YOUR TABS',
                   style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.grey[700],
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.red[600],
+                    letterSpacing: 3,
+                    shadows: [
+                      Shadow(
+                        color: Colors.red[900]!,
+                        blurRadius: 10,
+                      ),
+                    ],
                   ),
                   textAlign: TextAlign.center,
                 ),
-              ),
-              SizedBox(height: 10),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40.0),
-                child: Text(
-                  'Record, transcribe, and export your music with ease',
+                SizedBox(height: 12),
+                Text(
+                  'Automatic Audio Transcription',
                   style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
+                    fontSize: 16,
+                    color: Colors.grey[400],
+                    letterSpacing: 1,
                   ),
                   textAlign: TextAlign.center,
                 ),
-              ),
-              SizedBox(height: 50),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => RecordScreen()),
-                  );
-                },
-                icon: Icon(Icons.mic, size: 28),
-                label: Text('Start Recording'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                  textStyle: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                SizedBox(height: 8),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: Colors.grey[800]!, width: 1),
+                      bottom: BorderSide(color: Colors.grey[800]!, width: 1),
+                    ),
                   ),
-                  elevation: 8,
-                ),
-              ),
-              SizedBox(height: 20),
-              OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => ExportScreen()),
-                  );
-                },
-                icon: Icon(Icons.file_download, size: 24),
-                label: Text('View Exports'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.deepPurple,
-                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 18),
-                  textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  side: BorderSide(color: Colors.deepPurple, width: 2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                  child: Text(
+                    'Record • Analyze • Export',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      fontStyle: FontStyle.italic,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-              ),
-              SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => RecordingsScreen()),
-                  );
-                },
-                icon: Icon(Icons.library_music, size: 24),
-                label: Text('Saved Recordings'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.deepPurple,
-                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 18),
-                  textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  side: BorderSide(color: Colors.deepPurple, width: 2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                SizedBox(height: 50),
+                // Main action button
+                Container(
+                  width: double.infinity,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.red[800]!, Colors.red[600]!],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red[900]!.withOpacity(0.6),
+                        blurRadius: 15,
+                        offset: Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => RecordScreen()),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.mic, size: 32, color: Colors.white),
+                        SizedBox(width: 12),
+                        Text(
+                          'START RECORDING',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.5,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+                SizedBox(height: 30),
+                // Grid of navigation cards
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildNavCard(
+                        context,
+                        icon: Icons.library_music,
+                        label: 'RECORDINGS',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => RecordingsScreen()),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(
+                      child: _buildNavCard(
+                        context,
+                        icon: Icons.download,
+                        label: 'EXPORTS',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => ExportScreen()),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height:30),
+                // Feature highlights
+                Container(
+                  padding: EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900]!.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[800]!),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildFeatureItem(Icons.graphic_eq, 'Real-time Frequency Detection'),
+                      _buildFeatureItem(Icons.filter_alt, 'Advanced Noise Suppression'),
+                      _buildFeatureItem(Icons.music_note, 'Multi-Instrument Support'),
+                      _buildFeatureItem(Icons.download_done, 'Export MIDI & Tabs'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildNavCard(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        height: 120,
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[800]!, width: 2),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 40, color: Colors.red[600]),
+            SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: Colors.grey[300],
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureItem(IconData icon, String text) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Colors.red[700]),
+          SizedBox(width: 12),
+          Text(
+            text,
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 13,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -14,6 +14,7 @@ class _ExportScreenState extends State<ExportScreen> {
   final TextEditingController _textController = TextEditingController();
   final ExportService _exportService = ExportService();
   String? _selectedTranscription;
+  double _bpm = 120.0; // Default BPM for exports
 
   @override
   void initState() {
@@ -45,10 +46,25 @@ class _ExportScreenState extends State<ExportScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Export Transcriptions'),
-        backgroundColor: Colors.deepPurple,
+        title: Text(
+          'EXPORT TRANSCRIPTIONS',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2,
+          ),
+        ),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.red[600],
       ),
-      body: Consumer<AppStateProvider>(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.black, Colors.grey[900]!],
+          ),
+        ),
+        child: Consumer<AppStateProvider>(
         builder: (context, appState, child) {
           return Column(
             children: [
@@ -56,9 +72,9 @@ class _ExportScreenState extends State<ExportScreen> {
               Container(
                 padding: const EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: Colors.grey[900],
                   border: Border(
-                    bottom: BorderSide(color: Colors.grey[300]!, width: 1),
+                    bottom: BorderSide(color: Colors.grey[800]!, width: 1),
                   ),
                 ),
                 child: Column(
@@ -72,11 +88,12 @@ class _ExportScreenState extends State<ExportScreen> {
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
+                            color: Colors.grey[300],
                           ),
                         ),
                         if (_textController.text.isNotEmpty)
                           IconButton(
-                            icon: Icon(Icons.copy),
+                            icon: Icon(Icons.copy, color: Colors.red[600]),
                             tooltip: 'Copy to clipboard',
                             onPressed: () {
                               Clipboard.setData(ClipboardData(text: _textController.text));
@@ -94,17 +111,22 @@ class _ExportScreenState extends State<ExportScreen> {
                     Container(
                       height: 200,
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Colors.black,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey[300]!),
+                        border: Border.all(color: Colors.grey[800]!),
                       ),
                       child: TextField(
                         controller: _textController,
                         maxLines: null,
                         expands: true,
-                        style: TextStyle(fontFamily: 'monospace', fontSize: 14),
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 14,
+                          color: Colors.grey[300],
+                        ),
                         decoration: InputDecoration(
                           hintText: 'No transcription selected. Record audio or select from list below.',
+                          hintStyle: TextStyle(color: Colors.grey[600]),
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.all(12),
                         ),
@@ -121,9 +143,72 @@ class _ExportScreenState extends State<ExportScreen> {
                   children: [
                     Text(
                       'Export Options',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[300],
+                      ),
                     ),
                     SizedBox(height: 12),
+                    // BPM Configuration
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[900],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red[900]!),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.speed, color: Colors.red[600], size: 20),
+                          SizedBox(width: 12),
+                          Text(
+                            'BPM (Tempo):',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red[600],
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Container(
+                            width: 80,
+                            child: TextField(
+                              keyboardType: TextInputType.number,
+                              textAlign: TextAlign.center,
+                              decoration: InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.grey[800]!),
+                                ),
+                                filled: true,
+                                fillColor: Colors.black,
+                              ),
+                              style: TextStyle(color: Colors.grey[300]),
+                              controller: TextEditingController(text: _bpm.toStringAsFixed(0)),
+                              onChanged: (value) {
+                                setState(() {
+                                  _bpm = double.tryParse(value) ?? 120.0;
+                                  if (_bpm < 40) _bpm = 40;
+                                  if (_bpm > 240) _bpm = 240;
+                                });
+                              },
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            '(40-240)',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
@@ -153,7 +238,7 @@ class _ExportScreenState extends State<ExportScreen> {
                                   final filePath = await _exportService.exportAsMidi(
                                     notes,
                                     fileName,
-                                    bpm: 120,
+                                    bpm: _bpm.toInt(),
                                   );
                                   
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -293,12 +378,16 @@ class _ExportScreenState extends State<ExportScreen> {
                   children: [
                     Text(
                       'Saved Transcriptions',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[300],
+                      ),
                     ),
                     if (appState.transcriptions.isNotEmpty)
                       Text(
                         '${appState.transcriptions.length} item(s)',
-                        style: TextStyle(color: Colors.grey[600]),
+                        style: TextStyle(color: Colors.grey[500]),
                       ),
                   ],
                 ),
@@ -319,7 +408,7 @@ class _ExportScreenState extends State<ExportScreen> {
                               'No transcriptions yet',
                               style: TextStyle(
                                 fontSize: 18,
-                                color: Colors.grey[600],
+                                color: Colors.grey[500],
                               ),
                             ),
                             SizedBox(height: 8),
@@ -327,7 +416,7 @@ class _ExportScreenState extends State<ExportScreen> {
                               'Start recording to create your first transcription',
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.grey[500],
+                                color: Colors.grey[600],
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -343,16 +432,16 @@ class _ExportScreenState extends State<ExportScreen> {
                           return Card(
                             margin: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                             elevation: isSelected ? 4 : 1,
-                            color: isSelected ? Colors.deepPurple[50] : Colors.white,
+                            color: isSelected ? Colors.grey[850] : Colors.grey[900],
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                               side: isSelected 
-                                ? BorderSide(color: Colors.deepPurple, width: 2)
-                                : BorderSide.none,
+                                ? BorderSide(color: Colors.red[700]!, width: 2)
+                                : BorderSide(color: Colors.grey[800]!),
                             ),
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: isSelected ? Colors.deepPurple : Colors.grey[400],
+                                backgroundColor: isSelected ? Colors.red[700] : Colors.grey[700],
                                 child: Icon(
                                   Icons.music_note,
                                   color: Colors.white,
@@ -362,12 +451,14 @@ class _ExportScreenState extends State<ExportScreen> {
                                 'Transcription ${index + 1}',
                                 style: TextStyle(
                                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: Colors.grey[300],
                                 ),
                               ),
                               subtitle: Text(
                                 transcription.split('\n').first,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: Colors.grey[500]),
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -375,7 +466,7 @@ class _ExportScreenState extends State<ExportScreen> {
                                   if (isSelected)
                                     Icon(
                                       Icons.check_circle,
-                                      color: Colors.deepPurple,
+                                      color: Colors.red[600],
                                     ),
                                   SizedBox(width: 8),
                                   IconButton(
@@ -437,6 +528,7 @@ class _ExportScreenState extends State<ExportScreen> {
             ],
           );
         },
+      ),
       ),
     );
   }

@@ -45,16 +45,24 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Recording'),
-        content: Text('Are you sure you want to delete "${recording.name}"?'),
+        backgroundColor: Colors.grey[900],
+        title: Text(
+          'Delete Recording',
+          style: TextStyle(color: Colors.grey[300]),
+        ),
+        content: Text(
+          'Are you sure you want to delete "${recording.name}"?',
+          style: TextStyle(color: Colors.grey[400]),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
+            style: TextButton.styleFrom(foregroundColor: Colors.grey[400]),
             child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: Colors.red[600]),
             child: const Text('Delete'),
           ),
         ],
@@ -90,8 +98,15 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Saved Recordings'),
-        backgroundColor: Colors.deepPurple,
+        title: const Text(
+          'SAVED RECORDINGS',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2,
+          ),
+        ),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.red[600],
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -100,8 +115,20 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.black, Colors.grey[900]!],
+          ),
+        ),
+        child: _isLoading
+          ? Center(
+              child: CircularProgressIndicator(
+                color: Colors.red[600],
+              ),
+            )
           : _recordings.isEmpty
               ? Center(
                   child: Column(
@@ -117,7 +144,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                         'No recordings yet',
                         style: TextStyle(
                           fontSize: 18,
-                          color: Colors.grey[600],
+                          color: Colors.grey[500],
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -125,7 +152,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                         'Start recording to create your first audio file',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey[500],
+                          color: Colors.grey[600],
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -138,7 +165,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                       padding: const EdgeInsets.all(16.0),
                       child: Row(
                         children: [
-                          Icon(Icons.folder, color: Colors.deepPurple),
+                          Icon(Icons.folder, color: Colors.red[600]),
                           const SizedBox(width: 8),
                           Expanded(
                             child: FutureBuilder<String>(
@@ -148,18 +175,19 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                                   return Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Text(
+                                      Text(
                                         'Recordings Location:',
                                         style: TextStyle(
                                           fontSize: 12,
-                                          color: Colors.grey,
+                                          color: Colors.grey[500],
                                         ),
                                       ),
                                       Text(
                                         snapshot.data!,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 12,
                                           fontFamily: 'monospace',
+                                          color: Colors.grey[400],
                                         ),
                                       ),
                                     ],
@@ -170,7 +198,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.copy, size: 18),
+                            icon: Icon(Icons.copy, size: 18, color: Colors.red[600]),
                             tooltip: 'Copy path',
                             onPressed: () async {
                               final path = await _audioService.getRecordingsDirectory();
@@ -195,16 +223,17 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                         children: [
                           Text(
                             '${_recordings.length} recording(s)',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
+                              color: Colors.grey[300],
                             ),
                           ),
                           Text(
                             'Total: ${_getTotalSize()}',
                             style: TextStyle(
                               fontSize: 14,
-                              color: Colors.grey[600],
+                              color: Colors.grey[500],
                             ),
                           ),
                         ],
@@ -221,9 +250,14 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                               horizontal: 16,
                               vertical: 6,
                             ),
+                            color: Colors.grey[900],
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: Colors.grey[800]!),
+                            ),
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: Colors.deepPurple,
+                                backgroundColor: Colors.red[700],
                                 child: const Icon(
                                   Icons.audiotrack,
                                   color: Colors.white,
@@ -231,8 +265,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                               ),
                               title: Text(
                                 recording.name,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.w500,
+                                  color: Colors.grey[300],
                                 ),
                               ),
                               subtitle: Column(
@@ -243,14 +278,14 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                                     recording.formattedDate,
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey[600],
+                                      color: Colors.grey[500],
                                     ),
                                   ),
                                   Text(
                                     recording.formattedSize,
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey[600],
+                                      color: Colors.grey[500],
                                     ),
                                   ),
                                 ],
@@ -259,7 +294,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    icon: const Icon(Icons.folder_open),
+                                    icon: Icon(Icons.folder_open, color: Colors.red[600]),
                                     tooltip: 'Copy path',
                                     onPressed: () {
                                       Clipboard.setData(
@@ -286,7 +321,11 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                                 showDialog(
                                   context: context,
                                   builder: (context) => AlertDialog(
-                                    title: const Text('Recording Details'),
+                                    backgroundColor: Colors.grey[900],
+                                    title: Text(
+                                      'Recording Details',
+                                      style: TextStyle(color: Colors.grey[300]),
+                                    ),
                                     content: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -300,6 +339,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                                     actions: [
                                       TextButton(
                                         onPressed: () => Navigator.pop(context),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: Colors.red[600],
+                                        ),
                                         child: const Text('Close'),
                                       ),
                                     ],
@@ -312,8 +354,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                       ),
                     ),
                   ],
-                ),
-    );
+                ),      ),    );
   }
 
   Widget _buildDetailRow(String label, String value) {
@@ -324,16 +365,19 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: Colors.grey,
+              color: Colors.grey[500],
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 2),
           Text(
             value,
-            style: const TextStyle(fontSize: 14),
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[300],
+            ),
           ),
         ],
       ),
