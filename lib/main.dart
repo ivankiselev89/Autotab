@@ -8,6 +8,8 @@ void main() {
 }
 
 class AutotabApp extends StatelessWidget {
+  const AutotabApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
@@ -22,7 +24,6 @@ class AutotabApp extends StatelessWidget {
             primary: Colors.red[600]!,
             secondary: Colors.red[700]!,
             surface: Colors.grey[900]!,
-            background: Colors.black,
             error: Colors.red[400]!,
           ),
           textTheme: TextTheme(

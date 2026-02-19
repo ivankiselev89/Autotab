@@ -94,6 +94,29 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     }
   }
 
+  Future<void> _playRecording(RecordingInfo recording) async {
+    try {
+      await _audioService.playRecording(recording.path);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Playing: ${recording.name}'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error playing recording: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -293,6 +316,11 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  IconButton(
+                                    icon: Icon(Icons.play_arrow, color: Colors.green[400]),
+                                    tooltip: 'Play',
+                                    onPressed: () => _playRecording(recording),
+                                  ),
                                   IconButton(
                                     icon: Icon(Icons.folder_open, color: Colors.red[600]),
                                     tooltip: 'Copy path',

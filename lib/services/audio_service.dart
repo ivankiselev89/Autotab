@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:record/record.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 /// Audio recording service singleton
 /// Handles audio recording, amplitude monitoring, and file management
@@ -16,6 +17,7 @@ class AudioService {
 
   // Audio recorder instance
   final AudioRecorder _recorder = AudioRecorder();
+  final AudioPlayer _player = AudioPlayer();
   
   // Stream controller for audio levels
   final StreamController<double> _audioLevelController = StreamController<double>.broadcast();
@@ -211,15 +213,24 @@ class AudioService {
       print('Recording file does not exist: $pathToPlay');
       throw Exception('Recording file not found');
     }
-
-    // Note: Add 'just_audio' or 'audioplayers' package for playback functionality
-    print('Playback requires just_audio or audioplayers package');
-    print('Recording saved at: $pathToPlay');
+    
+    try {
+      print('Starting playback: $pathToPlay');
+      await _player.stop();
+      await _player.play(DeviceFileSource(pathToPlay));
+    } catch (e) {
+      print('Error during playback: $e');
+      rethrow;
+    }
   }
 
   // Method to stop playback
   Future<void> stopPlayback() async {
-    print('Playback requires just_audio or audioplayers package');
+    try {
+      await _player.stop();
+    } catch (e) {
+      print('Error stopping playback: $e');
+    }
   }
   
   // Check if currently playing
@@ -256,8 +267,12 @@ class AudioService {
       return [];
     }
     
-    final files = directory.listSync()
-        .where((item) => item is File && item.path.endsWith('.m4a'))
+    final files = directory
+        .listSync()
+        .where((item) =>
+            item is File &&
+            (item.path.toLowerCase().endsWith('.wav') ||
+             item.path.toLowerCase().endsWith('.m4a')))
         .cast<File>()
         .toList();
     
@@ -315,6 +330,7 @@ class AudioService {
   void dispose() {
     _amplitudeSubscription?.cancel();
     _recorder.dispose();
+    _player.dispose();
     _audioLevelController.close();
     _isInitialized = false;
   }

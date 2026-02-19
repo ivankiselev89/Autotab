@@ -16,7 +16,7 @@ void main() async {
   print('Permission granted');
   
   // Try to record in WAV format
-  final testPath = 'test_recording.wav';
+  const testPath = 'test_recording.wav';
   
   try {
     print('Starting recording...');
@@ -29,7 +29,7 @@ void main() async {
     );
     
     print('Recording for 2 seconds...');
-    await Future.delayed(Duration(seconds: 2));
+    await Future.delayed(const Duration(seconds: 2));
     
     final path = await recorder.stop();
     print('Recording stopped. File: $path');

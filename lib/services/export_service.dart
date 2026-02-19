@@ -12,23 +12,37 @@ class ExportService {
     String fileName, {
     int bpm = 120,
     int instrument = 0,
+    void Function(String message)? log,
   }) async {
+    log?.call('Preparing MIDI export for ${notes.length} note(s)...');
     final outputPath = await _getExportPath(fileName, 'mid');
+    log?.call('Resolved export path: $outputPath');
     
+    log?.call('Generating MIDI data...');
     await MidiGeneratorService.generateMidiFromNotes(
       notes,
       outputPath,
       bpm: bpm,
       instrument: instrument,
     );
+    log?.call('MIDI file written successfully.');
     
     return outputPath;
   }
 
   /// Export notes as guitar tablature text file
-  Future<String> exportAsTab(List<Note> notes, String fileName) async {
+  Future<String> exportAsTab(
+    List<Note> notes,
+    String fileName, {
+    void Function(String message)? log,
+  }) async {
+    log?.call('Preparing tab export for ${notes.length} note(s)...');
     final outputPath = await _getExportPath(fileName, 'txt');
+    log?.call('Resolved export path: $outputPath');
+
+    log?.call('Generating tab notation...');
     final tabContent = _tabGenerator.generateTab(notes);
+    log?.call('Generating text notation...');
     final textNotation = _tabGenerator.generateTextNotation(notes);
     
     final fullContent = '''
@@ -42,14 +56,24 @@ $textNotation
 ''';
     
     final file = File(outputPath);
+    log?.call('Writing tab file to disk...');
     await file.writeAsString(fullContent);
+    log?.call('Tab file written successfully.');
     
     return outputPath;
   }
 
   /// Export notes as text notation file
-  Future<String> exportAsTextNotation(List<Note> notes, String fileName) async {
+  Future<String> exportAsTextNotation(
+    List<Note> notes,
+    String fileName, {
+    void Function(String message)? log,
+  }) async {
+    log?.call('Preparing text notation export for ${notes.length} note(s)...');
     final outputPath = await _getExportPath(fileName, 'txt');
+    log?.call('Resolved export path: $outputPath');
+
+    log?.call('Generating text notation...');
     final textNotation = _tabGenerator.generateTextNotation(notes);
     
     final fullContent = '''
@@ -61,17 +85,27 @@ $textNotation
 ''';
     
     final file = File(outputPath);
+    log?.call('Writing text notation file to disk...');
     await file.writeAsString(fullContent);
+    log?.call('Text notation file written successfully.');
     
     return outputPath;
   }
 
   /// Export transcription text directly
-  Future<String> exportTranscriptionText(String transcriptionText, String fileName) async {
+  Future<String> exportTranscriptionText(
+    String transcriptionText,
+    String fileName, {
+    void Function(String message)? log,
+  }) async {
+    log?.call('Preparing transcription text export...');
     final outputPath = await _getExportPath(fileName, 'txt');
+    log?.call('Resolved export path: $outputPath');
     
     final file = File(outputPath);
+    log?.call('Writing transcription text file to disk...');
     await file.writeAsString(transcriptionText);
+    log?.call('Transcription text file written successfully.');
     
     return outputPath;
   }

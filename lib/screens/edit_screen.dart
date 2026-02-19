@@ -4,7 +4,7 @@ class EditScreen extends StatelessWidget {
   final String initialText;
   final ValueChanged<String> onSave;
 
-  EditScreen({required this.initialText, required this.onSave});
+  const EditScreen({super.key, required this.initialText, required this.onSave});
 
   @override
   Widget build(BuildContext context) {
@@ -13,7 +13,7 @@ class EditScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(
+        title: const Text(
           'EDIT NOTES',
           style: TextStyle(
             fontWeight: FontWeight.w900,
@@ -60,7 +60,7 @@ class EditScreen extends StatelessWidget {
                     letterSpacing: 1,
                   ),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   'Make any necessary corrections below',
                   style: TextStyle(
@@ -68,7 +68,7 @@ class EditScreen extends StatelessWidget {
                     color: Colors.grey[500],
                   ),
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
@@ -90,12 +90,12 @@ class EditScreen extends StatelessWidget {
                         hintText: 'Enter your notes here...',
                         hintStyle: TextStyle(color: Colors.grey[600]),
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(16),
+                        contentPadding: const EdgeInsets.all(16),
                       ),
                     ),
                   ),
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 Container(
                   width: double.infinity,
                   height: 60,
@@ -108,7 +108,7 @@ class EditScreen extends StatelessWidget {
                       BoxShadow(
                         color: Colors.red[900]!.withOpacity(0.6),
                         blurRadius: 15,
-                        offset: Offset(0, 5),
+                        offset: const Offset(0, 5),
                       ),
                     ],
                   ),
@@ -124,7 +124,7 @@ class EditScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.save, size: 24, color: Colors.white),

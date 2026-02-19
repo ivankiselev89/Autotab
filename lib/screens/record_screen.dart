@@ -10,8 +10,11 @@ import '../services/audio_analysis_service.dart';
 import '../models/note.dart';
 import 'edit_screen.dart';
 import 'export_screen.dart';
+import 'processing_screen.dart';
 
 class RecordScreen extends StatefulWidget {
+  const RecordScreen({super.key});
+
   @override
   _RecordScreenState createState() => _RecordScreenState();
 }
@@ -115,7 +118,7 @@ class _RecordScreenState extends State<RecordScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(
+        title: const Text(
           'RECORD',
           style: TextStyle(
             fontWeight: FontWeight.w900,
@@ -139,228 +142,189 @@ class _RecordScreenState extends State<RecordScreen> {
         ),
         child: SafeArea(
           child: SingleChildScrollView(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Instrument Selection - Mobile optimized grid
-                Text(
-                  'SELECT INSTRUMENT',
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5,
+                if (!isRecording) ...[
+                  // Instrument Selection - Mobile optimized grid
+                  Text(
+                    'SELECT INSTRUMENT',
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
+                    ),
                   ),
-                ),
-                SizedBox(height: 12),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                    childAspectRatio: 1,
-                  ),
-                  itemCount: instruments.length,
-                  itemBuilder: (context, index) {
-                    final instrument = instruments[index];
-                    final isSelected = selectedInstrument == instrument['name'];
-                    return InkWell(
-                      onTap: () {
-                        setState(() {
-                          selectedInstrument = instrument['name'] as String;
-                        });
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isSelected ? Colors.red[900]!.withOpacity(0.3) : Colors.grey[900],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isSelected ? Colors.red[700]! : Colors.grey[800]!,
-                            width: isSelected ? 3 : 1,
+                  const SizedBox(height: 12),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 1,
+                    ),
+                    itemCount: instruments.length,
+                    itemBuilder: (context, index) {
+                      final instrument = instruments[index];
+                      final isSelected = selectedInstrument == instrument['name'];
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            selectedInstrument = instrument['name'] as String;
+                          });
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.red[900]!.withOpacity(0.3) : Colors.grey[900],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected ? Colors.red[700]! : Colors.grey[800]!,
+                              width: isSelected ? 3 : 1,
+                            ),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.red[900]!.withOpacity(0.5),
+                                      blurRadius: 10,
+                                      spreadRadius: 2,
+                                    ),
+                                  ]
+                                : [],
                           ),
-                          boxShadow: isSelected ? [
-                            BoxShadow(
-                              color: Colors.red[900]!.withOpacity(0.5),
-                              blurRadius: 10,
-                              spreadRadius: 2,
-                            ),
-                          ] : [],
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                instrument['emoji'] as String,
+                                style: const TextStyle(fontSize: 36),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                instrument['name'] as String,
+                                style: TextStyle(
+                                  color: isSelected ? Colors.red[400] : Colors.grey[400],
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
+
+                  // BPM Control
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[900],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[800]!),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
                           children: [
+                            Icon(Icons.speed, color: Colors.red[600], size: 24),
+                            const SizedBox(width: 12),
                             Text(
-                              instrument['emoji'] as String,
-                              style: TextStyle(fontSize: 36),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              instrument['name'] as String,
+                              'BPM',
                               style: TextStyle(
-                                color: isSelected ? Colors.red[400] : Colors.grey[400],
-                                fontSize: 11,
+                                color: Colors.grey[300],
+                                fontSize: 16,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],
                         ),
-                      ),
-                    );
-                  },
-                ),
-                SizedBox(height: 24),
-                
-                // BPM Control - Compact mobile design
-                Container(
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[900],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[800]!),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.speed, color: Colors.red[600], size: 24),
-                          SizedBox(width: 12),
-                          Text(
-                            'BPM',
-                            style: TextStyle(
-                              color: Colors.grey[300],
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
+                        SizedBox(
+                          width: 80,
+                          child: TextField(
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
                             ),
+                            decoration: InputDecoration(
+                              contentPadding:
+                                  const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: Colors.red[700]!),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: Colors.grey[700]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: Colors.red[600]!, width: 2),
+                              ),
+                              filled: true,
+                              fillColor: Colors.black,
+                            ),
+                            keyboardType: TextInputType.number,
+                            controller:
+                                TextEditingController(text: bpm.toStringAsFixed(0)),
+                            onChanged: (value) {
+                              setState(() {
+                                bpm = double.tryParse(value) ?? bpm;
+                              });
+                            },
                           ),
-                        ],
-                      ),
-                      Container(
-                        width: 80,
-                        child: TextField(
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
-                          decoration: InputDecoration(
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.red[700]!),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[700]!),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.red[600]!, width: 2),
-                            ),
-                            filled: true,
-                            fillColor: Colors.black,
-                          ),
-                          keyboardType: TextInputType.number,
-                          controller: TextEditingController(text: bpm.toStringAsFixed(0)),
-                          onChanged: (value) {
-                            setState(() {
-                              bpm = double.tryParse(value) ?? bpm;
-                            });
-                          },
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: 24),
-                
-                // Recording Status - Large and prominent
-                Container(
-                  padding: EdgeInsets.symmetric(vertical: 40),
-                  decoration: BoxDecoration(
-                    color: isRecording ? Colors.red[900]!.withOpacity(0.2) : Colors.grey[900],
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isRecording ? Colors.red[700]! : Colors.grey[800]!,
-                      width: 2,
+                      ],
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        isRecording ? Icons.mic : Icons.mic_none,
-                        size: 80,
-                        color: isRecording ? Colors.red[600] : Colors.grey[700],
+                  const SizedBox(height: 24),
+                ],
+                
+                // Recording Status - show only while recording
+                if (isRecording)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    decoration: BoxDecoration(
+                      color: Colors.red[900]!.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.red[700]!,
+                        width: 2,
                       ),
-                      SizedBox(height: 16),
-                      Text(
-                        isRecording ? 'RECORDING...' : 'READY',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 2,
-                          color: isRecording ? Colors.red[600] : Colors.grey[500],
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.mic,
+                          size: 80,
+                          color: Colors.red[600],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 16),
+                        const Text(
+                          'RECORDING...',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                SizedBox(height: 24),
+                if (isRecording) const SizedBox(height: 24),
 
                 // Audio level visualization (conditional)
                 ..._buildRecordingVisualization(),
 
-                SizedBox(height: 20),
-            TextField(
-              decoration: InputDecoration(
-                labelText: 'BPM',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: Colors.grey[900],
-                prefixIcon: Icon(Icons.speed, color: Colors.red[600]),
-              ),
-              style: TextStyle(color: Colors.white),
-              keyboardType: TextInputType.number,
-              onChanged: (value) {
-                setState(() {
-                  bpm = double.tryParse(value) ?? bpm;
-                });
-              },
-            ),
-            SizedBox(height: 20),
-            DropdownButtonFormField<String>(
-              value: selectedInstrument,
-              decoration: InputDecoration(
-                labelText: 'Instrument',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: Colors.grey[900],
-                prefixIcon: Icon(Icons.music_note, color: Colors.red[600]),
-              ),
-              style: TextStyle(color: Colors.white),
-              dropdownColor: Colors.grey[900],
-              onChanged: (String? newValue) {
-                setState(() {
-                  selectedInstrument = newValue!;
-                });
-              },
-              items: instruments.map<DropdownMenuItem<String>>((instrument) {
-                final name = instrument['name'] as String;
-                return DropdownMenuItem<String>(
-                  value: name,
-                  child: Text(name),
-                );
-              }).toList(),
-            ),
-            SizedBox(height: 40),
+                const SizedBox(height: 40),
             
             // Large mobile-friendly record button with gradient
             Center(
@@ -376,7 +340,7 @@ class _RecordScreenState extends State<RecordScreen> {
                       if (savedPath == null || !File(savedPath).existsSync()) {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
+                            const SnackBar(
                               content: Text('Error: Recording file not found'),
                               backgroundColor: Colors.red,
                             ),
@@ -385,139 +349,98 @@ class _RecordScreenState extends State<RecordScreen> {
                         return;
                       }
                       
-                      // Show processing indicator
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Row(
-                              children: [
-                                SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                ),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('Analyzing audio with pitch detection...'),
-                                      SizedBox(height: 2),
-                                      Text(
-                                        'Reading WAV → $selectedInstrument filter → Noise suppression → Pitch detection',
-                                        style: TextStyle(fontSize: 10),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            duration: Duration(seconds: 10),
+                      if (!mounted) return;
+
+                      // Show dedicated processing screen with detailed logs
+                      await Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          fullscreenDialog: true,
+                          builder: (context) => ProcessingScreen<void>(
+                            title: 'Processing Recording',
+                            subtitle: 'Analyzing audio and generating transcription...',
+                            runTask: (log) async {
+                              log('Loading recorded audio from: $savedPath');
+                              try {
+                                _lastAnalysisResult = await audioAnalysis.analyzeRecording(
+                                  savedPath,
+                                  instrument: selectedInstrument,
+                                  bpm: bpm,
+                                );
+
+                                if (_lastAnalysisResult != null) {
+                                  log('Analysis complete. '
+                                      'Notes detected: ${_lastAnalysisResult!.notes.length}.');
+                                  log('Tempo: ${_lastAnalysisResult!.rhythm.formattedTempo}, '
+                                      'Noise reduction: '
+                                      '${_lastAnalysisResult!.noiseReductionPercent.toStringAsFixed(1)}%.');
+                                } else {
+                                  log('Analysis returned no result. Using fallback notes.');
+                                }
+                              } catch (e, stack) {
+                                print('=== ANALYSIS FAILED ===');
+                                print('Error: $e');
+                                print('Stack trace:');
+                                print(stack);
+                                log('Audio analysis failed. Using fallback transcription.');
+                                _lastAnalysisResult = null;
+                              }
+
+                              final appStateProvider =
+                                  Provider.of<AppStateProvider>(context, listen: false);
+
+                              log('Generating transcription text...');
+                              final newTranscription = _generateTranscription();
+
+                              // Extract the notes from analysis result or use fallback
+                              List<Note> notesForExport;
+                              if (_lastAnalysisResult != null &&
+                                  _lastAnalysisResult!.notes.isNotEmpty) {
+                                notesForExport = _lastAnalysisResult!.notes;
+                              } else {
+                                log('Using built-in fallback notes for export.');
+                                notesForExport = [
+                                  Note(
+                                      frequency: 196,
+                                      noteName: 'G',
+                                      octave: 3,
+                                      startTime: 0.0,
+                                      endTime: 0.5,
+                                      confidence: 0.85),
+                                  Note(
+                                      frequency: 220,
+                                      noteName: 'A',
+                                      octave: 3,
+                                      startTime: 0.5,
+                                      endTime: 1.0,
+                                      confidence: 0.88),
+                                  Note(
+                                      frequency: 247,
+                                      noteName: 'B',
+                                      octave: 3,
+                                      startTime: 1.0,
+                                      endTime: 1.5,
+                                      confidence: 0.90),
+                                ];
+                              }
+
+                              log('Saving transcription and notes to app state...');
+                              appStateProvider.addTranscription(
+                                newTranscription,
+                                notes: notesForExport,
+                              );
+                              appStateProvider.setCurrentTranscription(
+                                newTranscription,
+                                notes: notesForExport,
+                              );
+                              log('Transcription ready for export.');
+                            },
                           ),
-                        );
-                      }
-                      
-                      // Perform true audio analysis with instrument-specific filtering
-                      try {
-                        _lastAnalysisResult = await audioAnalysis.analyzeRecording(
-                          savedPath,
-                          instrument: selectedInstrument,
-                          bpm: bpm,
-                        );
-                        
-                        // Show analysis results
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).clearSnackBars();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('✓ Audio analysis complete!'),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    '${_lastAnalysisResult!.notes.length} notes detected | '
-                                    '${_lastAnalysisResult!.rhythm.formattedTempo} | '
-                                    'Noise reduced: ${_lastAnalysisResult!.noiseReductionPercent.toStringAsFixed(1)}%',
-                                    style: TextStyle(fontSize: 11),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Saved: $savedPath',
-                                    style: TextStyle(fontSize: 9),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                              backgroundColor: Colors.green,
-                              duration: Duration(seconds: 6),
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        print('=== ANALYSIS FAILED ===');
-                        print('Error: $e');
-                        print('Stack trace:');
-                        print(StackTrace.current);
-                        
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).clearSnackBars();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('⚠ Audio analysis not available'),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    'Using fallback transcription. Check console for details.',
-                                    style: TextStyle(fontSize: 10),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Reason: Unable to read audio file',
-                                    style: TextStyle(fontSize: 9, fontStyle: FontStyle.italic),
-                                  ),
-                                ],
-                              ),
-                              backgroundColor: Colors.orange,
-                              duration: Duration(seconds: 7),
-                            ),
-                          );
-                        }
-                        
-                        // Use fallback if FFmpeg fails
-                        _lastAnalysisResult = null;
-                      }
-                      
-                      // Generate a transcription based on the recording
-                      final appStateProvider = Provider.of<AppStateProvider>(context, listen: false);
-                      String newTranscription = _generateTranscription();
-                      
-                      // Extract the notes from analysis result or use fallback
-                      List<Note> notesForExport;
-                      if (_lastAnalysisResult != null && _lastAnalysisResult!.notes.isNotEmpty) {
-                        notesForExport = _lastAnalysisResult!.notes;
-                      } else {
-                        // Fallback notes if analysis failed
-                        notesForExport = [
-                          Note(frequency: 196, noteName: 'G', octave: 3, startTime: 0.0, endTime: 0.5, confidence: 0.85),
-                          Note(frequency: 220, noteName: 'A', octave: 3, startTime: 0.5, endTime: 1.0, confidence: 0.88),
-                          Note(frequency: 247, noteName: 'B', octave: 3, startTime: 1.0, endTime: 1.5, confidence: 0.90),
-                        ];
-                      }
-                      
-                      appStateProvider.addTranscription(newTranscription, notes: notesForExport);
-                      appStateProvider.setCurrentTranscription(newTranscription, notes: notesForExport);
-                      
-                      // Navigate to export screen immediately
+                        ),
+                      );
+
+                      if (!mounted) return;
+
+                      // Navigate to export screen after processing completes
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -540,7 +463,7 @@ class _RecordScreenState extends State<RecordScreen> {
                             SnackBar(
                               content: Text('Failed to start recording: ${e.toString()}'),
                               backgroundColor: Colors.red,
-                              duration: Duration(seconds: 5),
+                              duration: const Duration(seconds: 5),
                             ),
                           );
                         }
@@ -556,16 +479,16 @@ class _RecordScreenState extends State<RecordScreen> {
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Recording started - Capturing audio...'),
-                                SizedBox(height: 4),
+                                const Text('Recording started - Capturing audio...'),
+                                const SizedBox(height: 4),
                                 Text(
                                   'Saving to: $recordingsDir',
-                                  style: TextStyle(fontSize: 10),
+                                  style: const TextStyle(fontSize: 10),
                                 ),
                               ],
                             ),
                             backgroundColor: Colors.green,
-                            duration: Duration(seconds: 4),
+                            duration: const Duration(seconds: 4),
                           ),
                         );
                       }
@@ -588,7 +511,7 @@ class _RecordScreenState extends State<RecordScreen> {
                         color: isRecording ? Colors.grey[900]!.withOpacity(0.5) : Colors.red[900]!.withOpacity(0.7),
                         blurRadius: 15,
                         spreadRadius: 3,
-                        offset: Offset(0, 5),
+                        offset: const Offset(0, 5),
                       ),
                     ],
                   ),
@@ -600,10 +523,10 @@ class _RecordScreenState extends State<RecordScreen> {
                         size: 40,
                         color: Colors.white,
                       ),
-                      SizedBox(width: 16),
+                      const SizedBox(width: 16),
                       Text(
                         isRecording ? 'STOP & EXPORT' : 'RECORD',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 2,
@@ -615,54 +538,15 @@ class _RecordScreenState extends State<RecordScreen> {
                 ),
               ),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             
-            // Edit button - smaller and secondary
-            if (!isRecording)
-              Center(
-                child: TextButton.icon(
-                  onPressed: () {
-                    final appStateProvider = Provider.of<AppStateProvider>(context, listen: false);
-                    final currentContext = context;
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => EditScreen(
-                          initialText: 'Sample transcription for $selectedInstrument at $bpm BPM',
-                          onSave: (text) {
-                            appStateProvider.addTranscription(text);
-                          },
-                        ),
-                      ),
-                    ).then((_) {
-                      // Show snackbar after returning from edit screen
-                      ScaffoldMessenger.of(currentContext).showSnackBar(
-                        SnackBar(
-                          content: Text('Transcription saved'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    });
-                  },
-                  icon: Icon(Icons.edit, color: Colors.red[400]),
-                  label: Text(
-                    'Edit Sample',
-                    style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  ),
-                ),
-              ),
-          ],
+            // Removed "Edit Sample" block to simplify flow
+              ],
+            ),
+          ),
         ),
       ),
-    ),
-  ));
+    );
   }
   
   List<Widget> _buildRecordingVisualization() {
@@ -671,7 +555,7 @@ class _RecordScreenState extends State<RecordScreen> {
     return [
       // Real-time frequency display
       Container(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.grey[900]!.withOpacity(0.3),
           borderRadius: BorderRadius.circular(12),
@@ -693,7 +577,7 @@ class _RecordScreenState extends State<RecordScreen> {
                         color: Colors.red[600],
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       'Range: ${instrumentRanges[selectedInstrument]!["low"]!.toStringAsFixed(0)}-${instrumentRanges[selectedInstrument]!["high"]!.toStringAsFixed(0)} Hz',
                       style: TextStyle(
@@ -704,25 +588,25 @@ class _RecordScreenState extends State<RecordScreen> {
                   ],
                 ),
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
                     color: currentAudioLevel > 0.1 ? Colors.red[700] : Colors.grey[700],
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.graphic_eq,
                         color: Colors.white,
                         size: 20,
                       ),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             currentAudioLevel > 0.1 ? '$_currentNoteName$_currentOctave' : '--',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
@@ -731,7 +615,7 @@ class _RecordScreenState extends State<RecordScreen> {
                           if (currentAudioLevel > 0.1)
                             Text(
                               '~${_estimatedFrequency.toStringAsFixed(0)} Hz',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 10,
                                 color: Colors.white70,
                               ),
@@ -746,15 +630,15 @@ class _RecordScreenState extends State<RecordScreen> {
           ],
         ),
       ),
-      SizedBox(height: 16),
+      const SizedBox(height: 16),
       Text(
         'Signal Strength',
         style: TextStyle(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.w500),
       ),
-      SizedBox(height: 8),
+      const SizedBox(height: 8),
       Container(
         height: 100,
-        padding: EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.bottomCenter,
@@ -768,14 +652,14 @@ class _RecordScreenState extends State<RecordScreen> {
           border: Border.all(color: Colors.red[900]!.withOpacity(0.3)),
         ),
         child: CustomPaint(
-          size: Size(double.infinity, 100),
+          size: const Size(double.infinity, 100),
           painter: FrequencyVisualizerPainter(
             currentAudioLevel,
             instrumentRanges[selectedInstrument]!,
           ),
         ),
       ),
-      SizedBox(height: 12),
+      const SizedBox(height: 12),
       LinearProgressIndicator(
         value: currentAudioLevel,
         backgroundColor: Colors.grey[800],
@@ -784,7 +668,7 @@ class _RecordScreenState extends State<RecordScreen> {
         ),
         minHeight: 10,
       ),
-      SizedBox(height: 8),
+      const SizedBox(height: 8),
       Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -814,9 +698,9 @@ class _RecordScreenState extends State<RecordScreen> {
           ),
         ],
       ),
-      SizedBox(height: 8),
+      const SizedBox(height: 8),
       Container(
-        padding: EdgeInsets.all(8),
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: Colors.grey[850],
           borderRadius: BorderRadius.circular(8),
@@ -825,7 +709,7 @@ class _RecordScreenState extends State<RecordScreen> {
         child: Row(
           children: [
             Icon(Icons.info_outline, size: 16, color: Colors.red[400]),
-            SizedBox(width: 8),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Note detection shown above is approximate. Accurate pitch detection happens after recording stops.',
@@ -839,7 +723,7 @@ class _RecordScreenState extends State<RecordScreen> {
           ],
         ),
       ),
-      SizedBox(height: 20),
+      const SizedBox(height: 20),
     ];
   }
   
@@ -936,8 +820,8 @@ class FrequencyVisualizerPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     
     final centerY = size.height / 2;
-    final barWidth = 6.0;
-    final spacing = 3.0;
+    const barWidth = 6.0;
+    const spacing = 3.0;
     final totalBarWidth = barWidth + spacing;
     final numberOfBars = (size.width / totalBarWidth).floor();
     
@@ -967,7 +851,7 @@ class FrequencyVisualizerPainter extends CustomPainter {
             barWidth,
             height,
           ),
-          Radius.circular(3),
+          const Radius.circular(3),
         ),
         paint,
       );
@@ -1022,8 +906,8 @@ class AudioWaveformPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     
     final centerY = size.height / 2;
-    final barWidth = 4.0;
-    final spacing = 2.0;
+    const barWidth = 4.0;
+    const spacing = 2.0;
     final totalBarWidth = barWidth + spacing;
     final numberOfBars = (size.width / totalBarWidth).floor();
     
@@ -1041,7 +925,7 @@ class AudioWaveformPainter extends CustomPainter {
             barWidth,
             height,
           ),
-          Radius.circular(2),
+          const Radius.circular(2),
         ),
         paint,
       );

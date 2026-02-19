@@ -10,6 +10,9 @@ class NoteSegmentationService {
   static const int hopSize = 512; // Number of samples to skip between frames
   static const int frameSize = 2048; // Window size for analysis
   static const double minNoteDuration = 0.03; // Minimum note duration in seconds (very short notes allowed)
+  // Maximum number of samples to use for pitch detection per segment to
+  // avoid extremely expensive computations on very long segments.
+  static const int maxPitchSamples = 4096;
   
   /// Segments continuous audio into individual notes with timing and frequency information.
   /// 
@@ -33,7 +36,7 @@ class NoteSegmentationService {
           : audioData.length;
       
       // Extract the segment
-      final segment = audioData.sublist(startSample, endSample);
+      var segment = audioData.sublist(startSample, endSample);
       
       // Skip very short segments
       final duration = (endSample - startSample) / sampleRate;
@@ -41,7 +44,18 @@ class NoteSegmentationService {
         continue;
       }
       
-      // Detect pitch for this segment
+      // Limit the segment length used for pitch detection to keep the
+      // Yin algorithm performant even on long sustained notes. For
+      // very long segments we analyze only a centered window.
+      if (segment.length > maxPitchSamples) {
+        final center = segment.length ~/ 2;
+        final halfWindow = maxPitchSamples ~/ 2;
+        final start = math.max(0, center - halfWindow);
+        final end = math.min(segment.length, start + maxPitchSamples);
+        segment = segment.sublist(start, end);
+      }
+
+      // Detect pitch for this (possibly trimmed) segment
       final frequency = _pitchDetection.detectPitch(segment, sampleRate: sampleRate.toInt());
       
       // Skip segments with no detectable pitch

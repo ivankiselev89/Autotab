@@ -250,7 +250,8 @@ class AudioAnalysisService {
 
     print('  - Applying adaptive noise gate...');
     // Step 4: Apply adaptive noise gate based on signal RMS
-    cleaned = _applyAdaptiveNoiseGate(cleaned);
+    // Use slightly less aggressive gating for low-frequency instruments like bass
+    cleaned = _applyAdaptiveNoiseGate(cleaned, instrument: instrument);
 
     print('  - Enhancing harmonic content...');
     // Step 5: Enhance harmonic content for better pitch detection
@@ -330,12 +331,30 @@ class AudioAnalysisService {
   }
 
   /// Adaptive noise gate - uses RMS of signal to determine threshold
-  List<double> _applyAdaptiveNoiseGate(List<double> samples) {
+  ///
+  /// For low-frequency instruments like bass, we use a less aggressive
+  /// threshold so that quieter fundamentals are not mistaken for noise.
+  List<double> _applyAdaptiveNoiseGate(List<double> samples, {String instrument = ''}) {
     final rms = _calculateRMS(samples);
-    final adaptiveThreshold = rms * 0.15; // 15% of RMS as threshold
-    
-    print('    Adaptive gate threshold: ${adaptiveThreshold.toStringAsFixed(4)}');
-    
+
+    // Base factor for most instruments
+    double thresholdFactor = 0.15; // 15% of RMS as threshold
+
+    switch (instrument.toLowerCase()) {
+      case 'bass':
+      case 'bass guitar':
+        // Bass notes often have lower apparent level on typical mics,
+        // so relax the gate to keep more low-frequency content.
+        thresholdFactor = 0.07;
+        break;
+      default:
+        break;
+    }
+
+    final adaptiveThreshold = rms * thresholdFactor;
+
+    print('    Adaptive gate threshold: ${adaptiveThreshold.toStringAsFixed(4)} (factor: ${thresholdFactor.toStringAsFixed(3)})');
+
     return samples.map((s) {
       return s.abs() < adaptiveThreshold ? 0.0 : s;
     }).toList();
@@ -367,7 +386,7 @@ class AudioAnalysisService {
   List<double> _applyHighPassFilter(List<double> samples, {double cutoffFreq = 80.0}) {
     // First-order high-pass filter (IIR)
     // RC = 1 / (2 * pi * cutoffFreq)
-    final dt = 1.0 / sampleRate;
+    const dt = 1.0 / sampleRate;
     final rc = 1.0 / (2.0 * math.pi * cutoffFreq);
     final alpha = rc / (rc + dt);
 
@@ -383,7 +402,7 @@ class AudioAnalysisService {
   /// Low-pass filter to remove high-frequency noise
   List<double> _applyLowPassFilter(List<double> samples, {double cutoffFreq = 2000.0}) {
     // First-order low-pass filter (IIR)
-    final dt = 1.0 / sampleRate;
+    const dt = 1.0 / sampleRate;
     final rc = 1.0 / (2.0 * math.pi * cutoffFreq);
     final alpha = dt / (rc + dt);
 

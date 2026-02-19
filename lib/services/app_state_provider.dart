@@ -3,11 +3,11 @@ import '../models/note.dart';
 
 class AppStateProvider extends ChangeNotifier {
   Map<String, dynamic> _settings = {};
-  List<String> _transcriptions = [];
+  final List<String> _transcriptions = [];
   String _currentTranscription = '';
   
   // Store notes corresponding to each transcription
-  Map<String, List<Note>> _transcriptionNotes = {};
+  final Map<String, List<Note>> _transcriptionNotes = {};
   List<Note> _currentNotes = [];
 
   Map<String, dynamic> get settings => _settings;
