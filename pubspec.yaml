@@ -25,6 +25,27 @@ dev_dependencies:
   build_runner: ^2.0.0
   json_serializable: ^6.0.0
   flutter_lints: ^1.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  image_path: "assets/images/autotab_icon.png"
+  android: true
+  ios: true
+  web:
+    generate: true
+    image_path: "assets/images/autotab_icon.png"
+    background_color: "#000000"
+    theme_color: "#000000"
+  windows:
+    generate: true
+    image_path: "assets/images/autotab_icon.png"
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: "assets/images/autotab_icon.png"
+  linux:
+    generate: true
+    image_path: "assets/images/autotab_icon.png"
 
 flutter:
   uses-material-design: true

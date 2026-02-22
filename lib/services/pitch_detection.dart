@@ -4,7 +4,9 @@ class PitchDetectionService {
         'vocals': [85.0, 255.0],
         'guitar': [82.0, 880.0],
         'piano': [27.5, 4186.0],
-        'bass': [41.2, 400.0],
+        // 4-string bass (E1–G4). Allow a bit above fundamentals
+        // to capture harmonics used in real recordings.
+        'bass': [40.0, 392.0],
         'banjo': [146.8, 1760.0],
     };
 
