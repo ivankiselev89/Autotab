@@ -15,6 +15,9 @@ class AudioAnalysisService {
   static const int frameSize = 2048;
   static const int hopSize = 512;
 
+  // Last detected sample rate from a WAV header; defaults to 44.1 kHz
+  int _lastDetectedSampleRate = sampleRate;
+
   /// Analyze recorded audio file with true pitch detection
   /// 
   /// Steps:
@@ -68,6 +71,11 @@ class AudioAnalysisService {
 
     print('Decoded ${pcmData.length} audio samples');
 
+    // Determine effective sample rate from last decoded file (header-based
+    // when available, otherwise fallback to the default constant).
+    final effectiveSampleRate = _lastDetectedSampleRate;
+    print('Using sample rate $effectiveSampleRate Hz for analysis');
+
     // Step 2: Apply aggressive noise suppression with instrument-specific filtering
     print('Step 2: Applying professional-grade noise suppression...');
     final cleanedAudio = _applyAdvancedNoiseSupression(pcmData, instrument, sensitivity: sensitivity);
@@ -76,7 +84,7 @@ class AudioAnalysisService {
     // Step 3: Segment audio into notes (sensitivity-aware)
     final notes = _noteSegmentation.segmentAudio(
       cleanedAudio,
-      sampleRate: sampleRate.toDouble(),
+      sampleRate: effectiveSampleRate.toDouble(),
       sensitivity: sensitivity,
     );
 
@@ -88,8 +96,8 @@ class AudioAnalysisService {
     return AnalysisResult(
       notes: notes,
       rhythm: rhythm,
-      duration: pcmData.length / sampleRate,
-      sampleRate: sampleRate,
+      duration: pcmData.length / effectiveSampleRate,
+      sampleRate: effectiveSampleRate,
       originalSamples: pcmData.length,
       cleanedSamples: cleanedAudio.length,
     );
@@ -150,6 +158,26 @@ class AudioAnalysisService {
       
       print('Valid WAV file detected');
       print('Total file size: ${bytes.length} bytes');
+
+      // Try to read sample rate from standard WAV fmt header (offset 24-27)
+      try {
+        final srBytes = bytes.sublist(24, 28);
+        final detectedSampleRate =
+            srBytes[0] |
+            (srBytes[1] << 8) |
+            (srBytes[2] << 16) |
+            (srBytes[3] << 24);
+        if (detectedSampleRate > 0 && detectedSampleRate < 384000) {
+          _lastDetectedSampleRate = detectedSampleRate;
+          print('Detected sample rate from WAV header: $_lastDetectedSampleRate Hz');
+        } else {
+          print('Warning: Unreasonable sample rate in header ($detectedSampleRate), using default $sampleRate Hz');
+          _lastDetectedSampleRate = sampleRate;
+        }
+      } catch (e) {
+        print('Warning: Could not read sample rate from WAV header, using default $sampleRate Hz. Error: $e');
+        _lastDetectedSampleRate = sampleRate;
+      }
       
       // Skip header and read PCM data
       // Standard WAV header is 44 bytes, but we'll search for the 'data' chunk
