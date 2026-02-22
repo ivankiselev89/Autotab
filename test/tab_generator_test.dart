@@ -34,11 +34,12 @@ void main() {
       expect(lines.length, equals(6));
 
       // Check that each line starts with a string name
+      // From top to bottom: high E, B, G, D, A, low E
       expect(lines[0], startsWith('E|'));
-      expect(lines[1], startsWith('A|'));
-      expect(lines[2], startsWith('D|'));
-      expect(lines[3], startsWith('G|'));
-      expect(lines[4], startsWith('B|'));
+      expect(lines[1], startsWith('B|'));
+      expect(lines[2], startsWith('G|'));
+      expect(lines[3], startsWith('D|'));
+      expect(lines[4], startsWith('A|'));
       expect(lines[5], startsWith('E|'));
 
       // Check that lines end with |

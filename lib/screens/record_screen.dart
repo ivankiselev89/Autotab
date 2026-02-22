@@ -20,14 +20,13 @@ class RecordScreen extends StatefulWidget {
 }
 
 class _RecordScreenState extends State<RecordScreen> {
-  double bpm = 120.0;
   String selectedInstrument = 'Guitar';
+  String detectionSensitivity = 'High'; // High = capture as many notes as possible
   final List<Map<String, dynamic>> instruments = [
     {'name': 'Guitar', 'icon': Icons.music_note, 'emoji': '🎸'},
-    {'name': 'Piano', 'icon': Icons.piano, 'emoji': '🎹'},
-    {'name': 'Drums', 'icon': Icons.album, 'emoji': '🥁'},
     {'name': 'Violin', 'icon': Icons.music_note, 'emoji': '🎻'},
     {'name': 'Bass', 'icon': Icons.music_note, 'emoji': '🎸'},
+    {'name': 'Banjo', 'icon': Icons.music_note, 'emoji': '🪕'},
   ];
   bool isRecording = false;
   final AudioService audioService = AudioService();
@@ -51,11 +50,72 @@ class _RecordScreenState extends State<RecordScreen> {
     'Piano': {'low': 27.5, 'high': 4186.0, 'typical': 440.0},
     'Violin': {'low': 196.0, 'high': 3136.0, 'typical': 440.0},
     'Drums': {'low': 60.0, 'high': 8000.0, 'typical': 1000.0},
+    'Banjo': {'low': 146.8, 'high': 1760.0, 'typical': 400.0},
   };
+
+  Widget _buildSensitivityChip(String label, String subtitle) {
+    final isSelected = detectionSensitivity == label;
+    return ChoiceChip(
+      label: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              color: isSelected ? Colors.black : Colors.grey[200],
+            ),
+          ),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 9,
+              color: isSelected ? Colors.black87 : Colors.grey[400],
+            ),
+          ),
+        ],
+      ),
+      selected: isSelected,
+      selectedColor: Colors.red[400],
+      backgroundColor: Colors.grey[850],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: isSelected ? Colors.red[500]! : Colors.grey[700]!,
+        ),
+      ),
+      onSelected: (_) {
+        setState(() {
+          detectionSensitivity = label;
+        });
+
+        // Persist sensitivity choice in global app state if available
+        try {
+          final appState = Provider.of<AppStateProvider>(context, listen: false);
+          appState.setDetectionSensitivity(label);
+        } catch (_) {
+          // If provider is not available in this context, ignore
+        }
+      },
+    );
+  }
 
   @override
   void initState() {
     super.initState();
+    // Initialize detection sensitivity from global app settings if available
+    try {
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      final storedSensitivity = appState.detectionSensitivity;
+      if (storedSensitivity.isNotEmpty) {
+        detectionSensitivity = storedSensitivity;
+      }
+    } catch (_) {
+      // If provider is not available yet, fall back to default
+    }
+
     // Listen to audio level stream for visualization
     _audioLevelSubscription = audioService.audioLevelStream.listen((level) {
       if (mounted && isRecording) {
@@ -162,10 +222,10 @@ class _RecordScreenState extends State<RecordScreen> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                      childAspectRatio: 1,
+                      crossAxisCount: 4,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                      childAspectRatio: 0.9,
                     ),
                     itemCount: instruments.length,
                     itemBuilder: (context, index) {
@@ -200,14 +260,14 @@ class _RecordScreenState extends State<RecordScreen> {
                             children: [
                               Text(
                                 instrument['emoji'] as String,
-                                style: const TextStyle(fontSize: 36),
+                                style: const TextStyle(fontSize: 28),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 instrument['name'] as String,
                                 style: TextStyle(
                                   color: isSelected ? Colors.red[400] : Colors.grey[400],
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -219,7 +279,7 @@ class _RecordScreenState extends State<RecordScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // BPM Control
+                  // Detection Sensitivity Control
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -227,63 +287,38 @@ class _RecordScreenState extends State<RecordScreen> {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.grey[800]!),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.speed, color: Colors.red[600], size: 24),
+                            Icon(Icons.tune, color: Colors.red[600], size: 24),
                             const SizedBox(width: 12),
                             Text(
-                              'BPM',
+                              'DETECTION SENSITIVITY',
                               style: TextStyle(
                                 color: Colors.grey[300],
-                                fontSize: 16,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w700,
+                                letterSpacing: 1.2,
                               ),
                             ),
                           ],
                         ),
-                        SizedBox(
-                          width: 80,
-                          child: TextField(
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                            ),
-                            decoration: InputDecoration(
-                              contentPadding:
-                                  const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(color: Colors.red[700]!),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(color: Colors.grey[700]!),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(color: Colors.red[600]!, width: 2),
-                              ),
-                              filled: true,
-                              fillColor: Colors.black,
-                            ),
-                            keyboardType: TextInputType.number,
-                            controller:
-                                TextEditingController(text: bpm.toStringAsFixed(0)),
-                            onChanged: (value) {
-                              setState(() {
-                                bpm = double.tryParse(value) ?? bpm;
-                              });
-                            },
-                          ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            _buildSensitivityChip('Low', 'Cleaner, fewer notes'),
+                            _buildSensitivityChip('Medium', 'Balanced'),
+                            _buildSensitivityChip('High', 'Capture everything'),
+                          ],
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(height: 24),
+
                   const SizedBox(height: 24),
                 ],
                 
@@ -364,7 +399,7 @@ class _RecordScreenState extends State<RecordScreen> {
                                 _lastAnalysisResult = await audioAnalysis.analyzeRecording(
                                   savedPath,
                                   instrument: selectedInstrument,
-                                  bpm: bpm,
+                                  sensitivity: detectionSensitivity.toLowerCase(),
                                 );
 
                                 if (_lastAnalysisResult != null) {
@@ -393,33 +428,35 @@ class _RecordScreenState extends State<RecordScreen> {
 
                               // Extract the notes from analysis result or use fallback
                               List<Note> notesForExport;
-                              if (_lastAnalysisResult != null &&
-                                  _lastAnalysisResult!.notes.isNotEmpty) {
+                              if (_lastAnalysisResult != null) {
                                 notesForExport = _lastAnalysisResult!.notes;
                               } else {
-                                log('Using built-in fallback notes for export.');
+                                // Simple musical fallback if analysis failed
                                 notesForExport = [
                                   Note(
-                                      frequency: 196,
-                                      noteName: 'G',
-                                      octave: 3,
-                                      startTime: 0.0,
-                                      endTime: 0.5,
-                                      confidence: 0.85),
+                                    frequency: 196,
+                                    noteName: 'G',
+                                    octave: 3,
+                                    startTime: 0.0,
+                                    endTime: 0.5,
+                                    confidence: 0.85,
+                                  ),
                                   Note(
-                                      frequency: 220,
-                                      noteName: 'A',
-                                      octave: 3,
-                                      startTime: 0.5,
-                                      endTime: 1.0,
-                                      confidence: 0.88),
+                                    frequency: 220,
+                                    noteName: 'A',
+                                    octave: 3,
+                                    startTime: 0.5,
+                                    endTime: 1.0,
+                                    confidence: 0.88,
+                                  ),
                                   Note(
-                                      frequency: 247,
-                                      noteName: 'B',
-                                      octave: 3,
-                                      startTime: 1.0,
-                                      endTime: 1.5,
-                                      confidence: 0.90),
+                                    frequency: 247,
+                                    noteName: 'B',
+                                    octave: 3,
+                                    startTime: 1.0,
+                                    endTime: 1.5,
+                                    confidence: 0.90,
+                                  ),
                                 ];
                               }
 
@@ -427,10 +464,12 @@ class _RecordScreenState extends State<RecordScreen> {
                               appStateProvider.addTranscription(
                                 newTranscription,
                                 notes: notesForExport,
+                                instrument: selectedInstrument,
                               );
                               appStateProvider.setCurrentTranscription(
                                 newTranscription,
                                 notes: notesForExport,
+                                instrument: selectedInstrument,
                               );
                               log('Transcription ready for export.');
                             },
@@ -771,8 +810,11 @@ Harmonic Enhancement: Active''';
       analysisMethod = 'Fallback Mode (Analysis Failed)';
     }
     
-    // Use TabGeneratorService to generate tabs from notes
-    String generatedTab = tabGenerator.generateTab(notesToUse);
+    // Use TabGeneratorService to generate tabs from notes, respecting instrument
+    String generatedTab = tabGenerator.generateTab(
+      notesToUse,
+      instrument: selectedInstrument,
+    );
     String textNotation = tabGenerator.generateTextNotation(notesToUse);
     
     // Calculate recording duration
@@ -781,13 +823,17 @@ Harmonic Enhancement: Active''';
       duration = notesToUse.last.endTime;
     }
     
+    final estimatedTempoLine = _lastAnalysisResult != null
+      ? 'Estimated Tempo: ${_lastAnalysisResult!.rhythm.formattedTempo}\n'
+      : '';
+
     return '''
-Recording Details:
-Timestamp: $timestamp
-Instrument: $selectedInstrument
-BPM Setting: ${bpm.toStringAsFixed(0)}
-Duration: ${duration.toStringAsFixed(1)}s
-Notes Detected: ${notesToUse.length}
+  Recording Details:
+  Timestamp: $timestamp
+  Instrument: $selectedInstrument
+  Duration: ${duration.toStringAsFixed(1)}s
+  Notes Detected: ${notesToUse.length}
+  $estimatedTempoLine
 
 Generated Tablature:
 $generatedTab

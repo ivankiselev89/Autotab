@@ -8,19 +8,21 @@ class MidiGeneratorService {
   /// 
   /// [notes] - List of Note objects to convert
   /// [outputPath] - Path where the MIDI file will be saved
-  /// [bpm] - Tempo in beats per minute (default: 120)
   /// [instrument] - MIDI instrument number (default: 0 for Acoustic Grand Piano)
   static Future<void> generateMidiFromNotes(
     List<Note> notes,
     String outputPath, {
-    int bpm = 120,
     int instrument = 0,
   }) async {
     if (notes.isEmpty) {
       throw ArgumentError('Cannot generate MIDI from empty note list');
     }
     
-    final midiData = _createMidiFile(notes, bpm: bpm, instrument: instrument);
+    // Use detected note timings (startTime/endTime) directly. We keep a
+    // fixed internal tempo for the MIDI file but no longer expose BPM
+    // as a user-configurable parameter.
+    const int internalBpm = 120;
+    final midiData = _createMidiFile(notes, bpm: internalBpm, instrument: instrument);
     final file = File(outputPath);
     await file.writeAsBytes(midiData);
   }
@@ -71,34 +73,60 @@ class MidiGeneratorService {
     // Set instrument (Program Change)
     trackData.add(_createProgramChangeEvent(instrument));
     
-    // Sort notes by start time
-    final sortedNotes = List<Note>.from(notes)
-      ..sort((a, b) => a.startTime.compareTo(b.startTime));
-    
-    // Convert notes to MIDI events
-    int lastTicks = 0;
-    for (final note in sortedNotes) {
+    // Build absolute-timed MIDI events for all notes (handles overlaps correctly)
+    final events = <_MidiEvent>[];
+
+    for (final note in notes) {
       final startTicks = _secondsToTicks(note.startTime, bpm);
       final endTicks = _secondsToTicks(note.endTime, bpm);
-      final duration = endTicks - startTicks;
-      
-      // Delta time from last event
-      final deltaTime = startTicks - lastTicks;
-      
-      // Note On event
-      trackData.add(_createNoteOnEvent(
-        deltaTime,
-        _frequencyToMidiNote(note.frequency.toDouble()),
-        _confidenceToVelocity(note.confidence),
+
+      // Ensure non-negative duration; skip notes with invalid timing
+      if (endTicks <= startTicks) continue;
+
+      final midiNote = _frequencyToMidiNote(note.frequency.toDouble());
+      final velocity = _confidenceToVelocity(note.confidence);
+
+      events.add(_MidiEvent(
+        timeTicks: startTicks,
+        type: _MidiEventType.noteOn,
+        midiNote: midiNote,
+        velocity: velocity,
       ));
-      
-      // Note Off event
-      trackData.add(_createNoteOffEvent(
-        duration,
-        _frequencyToMidiNote(note.frequency.toDouble()),
+
+      events.add(_MidiEvent(
+        timeTicks: endTicks,
+        type: _MidiEventType.noteOff,
+        midiNote: midiNote,
+        velocity: 0,
       ));
-      
-      lastTicks = endTicks;
+    }
+
+    // Sort events by absolute time, and for identical times
+    // emit Note Off events before Note On to avoid stuck notes.
+    events.sort((a, b) {
+      final timeCompare = a.timeTicks.compareTo(b.timeTicks);
+      if (timeCompare != 0) return timeCompare;
+      if (a.type == b.type) return 0;
+      return a.type == _MidiEventType.noteOff ? -1 : 1;
+    });
+
+    // Emit events with proper delta times
+    int lastTicks = 0;
+    for (final event in events) {
+      final deltaTime = event.timeTicks - lastTicks;
+      if (event.type == _MidiEventType.noteOn) {
+        trackData.add(_createNoteOnEvent(
+          deltaTime,
+          event.midiNote,
+          event.velocity,
+        ));
+      } else {
+        trackData.add(_createNoteOffEvent(
+          deltaTime,
+          event.midiNote,
+        ));
+      }
+      lastTicks = event.timeTicks;
     }
     
     // End of track meta event
@@ -218,4 +246,21 @@ class MidiGeneratorService {
     final velocity = (40 + (confidence * 87)).round();
     return velocity.clamp(40, 127);
   }
+}
+
+/// Internal representation of a MIDI event with absolute tick time.
+enum _MidiEventType { noteOn, noteOff }
+
+class _MidiEvent {
+  final int timeTicks;
+  final _MidiEventType type;
+  final int midiNote;
+  final int velocity;
+
+  _MidiEvent({
+    required this.timeTicks,
+    required this.type,
+    required this.midiNote,
+    required this.velocity,
+  });
 }

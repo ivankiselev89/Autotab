@@ -108,7 +108,7 @@ String generateTextNotation(List<Note> notes)
 
 **Key Features**:
 - Complete MIDI file generation (header + track chunks)
-- Tempo configuration (BPM)
+- Internal tempo handling (no user-configured BPM)
 - Instrument selection (128 MIDI instruments)
 - Variable-length quantity encoding
 - Velocity mapping from confidence scores
@@ -119,7 +119,7 @@ String generateTextNotation(List<Note> notes)
 static Future<void> generateMidiFromNotes(
   List<Note> notes,
   String outputPath,
-  {int bpm = 120, int instrument = 0}
+  {int instrument = 0}
 )
 ```
 
@@ -138,7 +138,7 @@ static Future<void> generateMidiFromNotes(
 
 **API**:
 ```dart
-Future<String> exportAsMidi(List<Note> notes, String fileName, {int bpm, int instrument})
+Future<String> exportAsMidi(List<Note> notes, String fileName, {int instrument})
 Future<String> exportAsTab(List<Note> notes, String fileName)
 Future<String> exportAsTextNotation(List<Note> notes, String fileName)
 Future<String> exportTranscriptionText(String text, String fileName)

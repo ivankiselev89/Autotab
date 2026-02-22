@@ -23,11 +23,10 @@ class AudioAnalysisService {
   /// 3. Detect pitch using Yin algorithm
   /// 4. Segment notes and extract rhythm
   /// 
-  /// [bpm] is used for rhythm normalization but does not discard short notes
   Future<AnalysisResult> analyzeRecording(
     String wavFilePath, {
     String instrument = 'Guitar',
-    double bpm = 120.0,
+    String sensitivity = 'high',
   }) async {
     print('=== AUDIO ANALYSIS START ===');
     print('File path: $wavFilePath');
@@ -71,19 +70,20 @@ class AudioAnalysisService {
 
     // Step 2: Apply aggressive noise suppression with instrument-specific filtering
     print('Step 2: Applying professional-grade noise suppression...');
-    final cleanedAudio = _applyAdvancedNoiseSupression(pcmData, instrument);
+    final cleanedAudio = _applyAdvancedNoiseSupression(pcmData, instrument, sensitivity: sensitivity);
     print('Applied noise suppression and instrument filtering');
 
-    // Step 3: Segment audio into notes
+    // Step 3: Segment audio into notes (sensitivity-aware)
     final notes = _noteSegmentation.segmentAudio(
       cleanedAudio,
       sampleRate: sampleRate.toDouble(),
+      sensitivity: sensitivity,
     );
 
     print('Detected ${notes.length} notes');
 
-    // Step 4: Extract rhythm information using provided BPM
-    final rhythm = _extractRhythm(notes, bpm: bpm);
+    // Step 4: Extract rhythm information based on detected note timings
+    final rhythm = _extractRhythm(notes);
 
     return AnalysisResult(
       notes: notes,
@@ -232,7 +232,7 @@ class AudioAnalysisService {
   /// 3. Instrument-specific band-pass filtering
   /// 4. Adaptive noise gate with RMS-based threshold
   /// 5. Harmonic enhancement for target instrument
-  List<double> _applyAdvancedNoiseSupression(List<double> samples, String instrument) {
+  List<double> _applyAdvancedNoiseSupression(List<double> samples, String instrument, {String sensitivity = 'high'}) {
     if (samples.isEmpty) return samples;
 
     print('  - Removing DC offset...');
@@ -242,7 +242,7 @@ class AudioAnalysisService {
 
     print('  - Applying spectral subtraction for noise reduction...');
     // Step 2: Spectral subtraction - estimate and remove noise
-    cleaned = _applySpectralNoiseReduction(cleaned);
+    cleaned = _applySpectralNoiseReduction(cleaned, sensitivity: sensitivity);
 
     print('  - Applying instrument-specific band-pass filter ($instrument)...');
     // Step 3: Apply instrument-specific band-pass filter
@@ -250,8 +250,9 @@ class AudioAnalysisService {
 
     print('  - Applying adaptive noise gate...');
     // Step 4: Apply adaptive noise gate based on signal RMS
-    // Use slightly less aggressive gating for low-frequency instruments like bass
-    cleaned = _applyAdaptiveNoiseGate(cleaned, instrument: instrument);
+    // Use slightly less aggressive gating for low-frequency instruments like bass,
+    // and tune threshold by overall sensitivity.
+    cleaned = _applyAdaptiveNoiseGate(cleaned, instrument: instrument, sensitivity: sensitivity);
 
     print('  - Enhancing harmonic content...');
     // Step 5: Enhance harmonic content for better pitch detection
@@ -261,7 +262,7 @@ class AudioAnalysisService {
   }
 
   /// Spectral noise reduction - estimate noise floor and subtract it
-  List<double> _applySpectralNoiseReduction(List<double> samples) {
+  List<double> _applySpectralNoiseReduction(List<double> samples, {String sensitivity = 'high'}) {
     // Use first 0.5 seconds as noise profile (assume silence/noise at start)
     final noiseProfileLength = (sampleRate * 0.5).toInt().clamp(0, samples.length ~/  4);
     
@@ -269,7 +270,23 @@ class AudioAnalysisService {
     
     final noiseProfile = samples.sublist(0, noiseProfileLength);
     final noiseRMS = _calculateRMS(noiseProfile);
-    final noiseThreshold = noiseRMS * 2.5; // Aggressive threshold
+
+    // Tune how aggressively we treat low-level content as noise.
+    double factor;
+    switch (sensitivity.toLowerCase()) {
+      case 'low':
+        factor = 2.3; // more aggressive, cleaner output
+        break;
+      case 'medium':
+        factor = 1.8; // balanced
+        break;
+      case 'high':
+      default:
+        factor = 1.4; // very permissive, keep more detail
+        break;
+    }
+
+    final noiseThreshold = noiseRMS * factor;
     
     print('    Noise floor RMS: ${noiseRMS.toStringAsFixed(4)}, Threshold: ${noiseThreshold.toStringAsFixed(4)}');
     
@@ -310,6 +327,10 @@ class AudioAnalysisService {
         lowCutoff = 196.0;   // G3 - lowest violin string
         highCutoff = 3136.0; // G7 - high violin notes
         break;
+      case 'banjo':
+        lowCutoff = 146.8;   // D3 - lowest standard banjo string
+        highCutoff = 1760.0; // A6 - typical high banjo range
+        break;
       case 'drums':
         lowCutoff = 60.0;    // Low drums
         highCutoff = 8000.0; // Cymbals and high percussion
@@ -334,18 +355,34 @@ class AudioAnalysisService {
   ///
   /// For low-frequency instruments like bass, we use a less aggressive
   /// threshold so that quieter fundamentals are not mistaken for noise.
-  List<double> _applyAdaptiveNoiseGate(List<double> samples, {String instrument = ''}) {
+  /// Sensitivity further scales how permissive the gate is overall.
+  List<double> _applyAdaptiveNoiseGate(List<double> samples, {String instrument = '', String sensitivity = 'high'}) {
     final rms = _calculateRMS(samples);
 
-    // Base factor for most instruments
-    double thresholdFactor = 0.15; // 15% of RMS as threshold
+    // Base factor for most instruments. Lowering this makes the gate
+    // more permissive so that borderline content is kept as potential
+    // notes instead of being zeroed out.
+    double thresholdFactor;
+
+    switch (sensitivity.toLowerCase()) {
+      case 'low':
+        thresholdFactor = 0.15; // stricter, cleaner
+        break;
+      case 'medium':
+        thresholdFactor = 0.10; // balanced
+        break;
+      case 'high':
+      default:
+        thresholdFactor = 0.06; // very permissive
+        break;
+    }
 
     switch (instrument.toLowerCase()) {
       case 'bass':
       case 'bass guitar':
         // Bass notes often have lower apparent level on typical mics,
-        // so relax the gate to keep more low-frequency content.
-        thresholdFactor = 0.07;
+        // so relax the gate further to keep low-frequency content.
+        thresholdFactor *= 0.7;
         break;
       default:
         break;
@@ -415,14 +452,16 @@ class AudioAnalysisService {
     return filtered;
   }
 
-  /// Extract rhythm information from detected notes
-  /// Uses provided [bpm] for duration quantization
-  RhythmInfo _extractRhythm(List<Note> notes, {double bpm = 120.0}) {
+  /// Extract rhythm information from detected notes.
+  ///
+  /// Tempo is estimated from note durations; no external BPM setting
+  /// is required.
+  RhythmInfo _extractRhythm(List<Note> notes) {
     if (notes.isEmpty) {
       return RhythmInfo(
         beats: [],
         averageDuration: 0.0,
-        tempo: bpm,
+        tempo: 120.0,
         timeSignature: '4/4',
         noteDurations: [],
       );
@@ -431,15 +470,17 @@ class AudioAnalysisService {
     final durations = notes.map((n) => n.endTime - n.startTime).toList();
     final averageDuration = durations.reduce((a, b) => a + b) / durations.length;
 
-    // Estimate tempo (BPM) from average note duration
-    // Assuming quarter note = 1 beat
-    final estimatedTempo = averageDuration > 0 ? 60.0 / averageDuration : bpm;
+    // Estimate tempo (BPM) from average note duration, assuming
+    // quarter note = 1 beat.
+    final estimatedTempo = averageDuration > 0 ? 60.0 / averageDuration : 120.0;
 
     // Detect beats (note onsets)
     final beats = notes.map((n) => n.startTime).toList();
 
-    // Quantize durations to common note values based on provided BPM
-    final quantizedDurations = durations.map((d) => _quantizeDuration(d, bpm: bpm)).toList();
+    // Quantize durations to common note values based on estimated tempo
+    final quantizedDurations = durations
+      .map((d) => _quantizeDuration(d, bpm: estimatedTempo.clamp(40.0, 240.0)))
+      .toList();
 
     return RhythmInfo(
       beats: beats,

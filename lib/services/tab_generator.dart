@@ -13,42 +13,64 @@ class TabGeneratorService {
     329.63, // E4
   ];
   
+  // 5-string banjo in standard open G tuning (g D G B D)
+  // Internal order is from lowest pitch to highest pitch; rendering
+  // reverses this to show highest string on top.
+  static const List<String> banjoStrings = ['D', 'G', 'B', 'D', 'g'];
+  static const List<double> banjoStringFrequencies = [
+    146.83, // D3
+    196.00, // G3
+    246.94, // B3
+    293.66, // D4
+    392.00, // g4 (5th string, short drone)
+  ];
+  
   /// Generates a guitar tab from a list of notes.
   /// Returns a formatted string representing guitar tablature.
-  String generateTab(List<Note> notes) {
+  String generateTab(List<Note> notes, {String instrument = 'guitar'}) {
     if (notes.isEmpty) {
       return 'No notes to generate tab from.';
     }
     
+    final lowerInstrument = instrument.toLowerCase();
+    final isBanjo = lowerInstrument == 'banjo';
+    final strings = isBanjo ? banjoStrings : guitarStrings;
+    final stringFrequencies = isBanjo ? banjoStringFrequencies : guitarStringFrequencies;
+    final stringCount = strings.length;
+
     // Initialize tab lines for each string
-    final tabLines = List<String>.generate(6, (i) => '${guitarStrings[i]}|');
+    final tabLines = List<String>.generate(stringCount, (i) => '${strings[i]}|');
     
     // Group notes by time for simultaneous notes (chords)
     final groupedNotes = _groupNotesByTime(notes);
     
     // Process each time group
     for (final noteGroup in groupedNotes) {
-      final fretPositions = List<String>.filled(6, '-');
+      final fretPositions = List<String>.filled(stringCount, '-');
       
       for (final note in noteGroup) {
-        final stringFret = _findBestStringAndFret(note.frequency.toDouble());
+        final stringFret = _findBestStringAndFret(note.frequency.toDouble(), stringFrequencies);
         if (stringFret != null) {
           fretPositions[stringFret['string']!] = stringFret['fret'].toString();
         }
       }
       
       // Add positions to tab lines
-      for (int i = 0; i < 6; i++) {
+      for (int i = 0; i < stringCount; i++) {
         tabLines[i] += fretPositions[i].padRight(3, '-');
       }
     }
     
     // Close tab lines
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < stringCount; i++) {
       tabLines[i] += '|';
     }
-    
-    return tabLines.join('\n');
+
+    // Standard guitar/bass tab notation shows the highest-pitched string
+    // on the top line and the lowest-pitched string on the bottom line.
+    // Our internal string index 0 is the lowest E, so we render in
+    // reverse order to match standard tab layouts.
+    return tabLines.reversed.join('\n');
   }
   
   /// Generates simple text notation from a list of notes.
@@ -106,35 +128,54 @@ class TabGeneratorService {
   
   /// Finds the best guitar string and fret position for a given frequency
   /// Returns a map with 'string' (0-5) and 'fret' (0-24) or null if out of range
-  Map<String, int>? _findBestStringAndFret(double frequency) {
+  Map<String, int>? _findBestStringAndFret(double frequency, List<double> stringFrequencies) {
     const maxFret = 24;
     const fretRatio = 1.059463094359; // 12th root of 2
-    
-    Map<String, int>? bestMatch;
-    double minDifference = double.infinity;
-    
-    // Try each string
-    for (int stringNum = 0; stringNum < 6; stringNum++) {
-      final openStringFreq = guitarStringFrequencies[stringNum];
-      
+
+    // Collect all reasonable candidates (within 5% in frequency)
+    final candidates = <Map<String, dynamic>>[];
+
+    // Try each string for the provided tuning
+    for (int stringNum = 0; stringNum < stringFrequencies.length; stringNum++) {
+      final openStringFreq = stringFrequencies[stringNum];
+
       // Try each fret on this string
       for (int fret = 0; fret <= maxFret; fret++) {
         final fretFreq = openStringFreq * math.pow(fretRatio, fret);
         final difference = (frequency - fretFreq).abs();
-        
-        // Find closest match
-        if (difference < minDifference) {
-          minDifference = difference;
-          bestMatch = {'string': stringNum, 'fret': fret};
+        final relativeDiff = difference / frequency;
+
+        // Only keep reasonably close matches
+        if (relativeDiff < 0.05) {
+          candidates.add({
+            'string': stringNum,
+            'fret': fret,
+            'difference': difference,
+          });
         }
       }
     }
-    
-    // Only return if the match is reasonably close (within 5%)
-    if (bestMatch != null && minDifference / frequency < 0.05) {
-      return bestMatch;
+
+    if (candidates.isEmpty) {
+      return null;
     }
-    
-    return null;
+
+    // Prefer positions closest to the nut (lowest fret),
+    // then the most accurate frequency match, then lower string index.
+    candidates.sort((a, b) {
+      final fretCompare = (a['fret'] as int).compareTo(b['fret'] as int);
+      if (fretCompare != 0) return fretCompare;
+
+      final diffCompare = (a['difference'] as double).compareTo(b['difference'] as double);
+      if (diffCompare != 0) return diffCompare;
+
+      return (a['string'] as int).compareTo(b['string'] as int);
+    });
+
+    final best = candidates.first;
+    return {
+      'string': best['string'] as int,
+      'fret': best['fret'] as int,
+    };
   }
 }

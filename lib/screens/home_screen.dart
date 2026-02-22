@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'record_screen.dart';
-import 'export_screen.dart';
+import 'exported_files_screen.dart';
 import 'recordings_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -55,7 +55,7 @@ class HomeScreen extends StatelessWidget {
                     ),
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: Colors.red[700]!,
+                      color: const Color.fromARGB(255, 172, 36, 36)!,
                       width: 3,
                     ),
                     boxShadow: [
@@ -192,7 +192,7 @@ class HomeScreen extends StatelessWidget {
                         label: 'EXPORTS',
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => ExportScreen()),
+                          MaterialPageRoute(builder: (context) => const ExportedFilesScreen()),
                         ),
                       ),
                     ),

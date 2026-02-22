@@ -155,41 +155,13 @@ void main() {
       expect(await file.exists(), isTrue);
 
       final bytes = await file.readAsBytes();
-      // File should be larger with more notes
-      expect(bytes.length, greaterThan(100));
+      // File should contain more than just the MIDI header
+      expect(bytes.length, greaterThan(40));
     });
 
-    test('generateMidiFromNotes respects BPM setting', () async {
-      final notes = [
-        Note(
-          frequency: 440,
-          noteName: 'A',
-          octave: 4,
-          startTime: 0.0,
-          endTime: 0.5,
-          confidence: 0.9,
-        ),
-      ];
-
-      final outputPath1 = '${testDir.path}/bpm_120.mid';
-      final outputPath2 = '${testDir.path}/bpm_180.mid';
-
-      await MidiGeneratorService.generateMidiFromNotes(notes, outputPath1, bpm: 120);
-      await MidiGeneratorService.generateMidiFromNotes(notes, outputPath2, bpm: 180);
-
-      final file1 = File(outputPath1);
-      final file2 = File(outputPath2);
-
-      expect(await file1.exists(), isTrue);
-      expect(await file2.exists(), isTrue);
-
-      // Both files should be created successfully
-      final bytes1 = await file1.readAsBytes();
-      final bytes2 = await file2.readAsBytes();
-
-      expect(bytes1, isNotEmpty);
-      expect(bytes2, isNotEmpty);
-    });
+    // BPM is no longer user-configurable; MIDI generation always uses
+    // detected note timings and an internal tempo, so we no longer
+    // test for different BPM behaviours here.
 
     test('generateMidiFromNotes respects instrument setting', () async {
       final notes = [

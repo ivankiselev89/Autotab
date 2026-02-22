@@ -5,6 +5,7 @@ class PitchDetectionService {
         'guitar': [82.0, 880.0],
         'piano': [27.5, 4186.0],
         'bass': [41.2, 400.0],
+        'banjo': [146.8, 1760.0],
     };
 
     // Constants for Yin algorithm

@@ -18,11 +18,11 @@ The Autotab mobile app is a comprehensive music transcription tool built with Fl
 #### 2. Record Screen (`lib/screens/record_screen.dart`)
 - **Purpose**: Record audio and configure recording settings
 - **Features**:
-  - BPM (Beats Per Minute) input field
   - Instrument selection dropdown (Guitar, Piano, Drums, Violin)
+  - Detection sensitivity selector (Low / Medium / High)
   - Record/Stop button with visual feedback
   - Recording status indicator (microphone icon changes color)
-  - Edit button to review and edit transcriptions
+  - Edit/Export flow to review and export transcriptions
   - Integration with AudioService for recording functionality
 
 #### 3. Edit Screen (`lib/screens/edit_screen.dart`)

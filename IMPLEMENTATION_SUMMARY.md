@@ -36,8 +36,8 @@ These services provide the core music processing capabilities needed for the MVP
 - Clean, centered layout with icons
 
 #### Record Screen
-- BPM (Beats Per Minute) input
 - Instrument selection dropdown (Guitar, Piano, Drums, Violin)
+- Detection sensitivity selector (Low / Medium / High)
 - Record/Stop button with visual feedback (color changes, icon changes)
 - Recording status indicator
 - Navigation to Edit Screen
@@ -82,9 +82,9 @@ These services provide the core music processing capabilities needed for the MVP
   - Chord detection (simultaneous notes)
   - Standard 6-string guitar tuning
   - Comprehensive test coverage
-- **MidiGeneratorService**: ✅ FULLY IMPLEMENTED
+**MidiGeneratorService**: ✅ FULLY IMPLEMENTED
   - Complete MIDI file format implementation (SMF Format 0)
-  - Configurable tempo (BPM) and instruments
+  - Internal tempo handling (no user-configured BPM)
   - Note On/Off events with velocity
   - Variable-length quantity encoding
   - Comprehensive test coverage
