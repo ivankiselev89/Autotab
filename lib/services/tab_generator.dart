@@ -91,9 +91,17 @@ class TabGeneratorService {
     }
 
     // Standard guitar/bass tab notation shows the highest-pitched string
-    // on the top line and the lowest-pitched string on the bottom line.
-    // Our internal string index 0 is the lowest E, so we render in
-    // reverse order to match standard tab layouts.
+    // on the top line and the lowest-pitched string on the bottom line,
+    // so for those instruments we render in reverse order.
+    //
+    // For 5-string banjo, the short high "g" string is physically
+    // closest to the player and conventionally shown on the *bottom*
+    // line in some tab styles, so we keep the internal low->high order
+    // and do NOT reverse.
+    if (isBanjo) {
+      return tabLines.join('\n');
+    }
+
     return tabLines.reversed.join('\n');
   }
   
