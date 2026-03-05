@@ -81,11 +81,12 @@ class AudioAnalysisService {
     final cleanedAudio = _applyAdvancedNoiseSupression(pcmData, instrument, sensitivity: sensitivity);
     print('Applied noise suppression and instrument filtering');
 
-    // Step 3: Segment audio into notes (sensitivity-aware)
+    // Step 3: Segment audio into notes (sensitivity- and instrument-aware)
     final notes = _noteSegmentation.segmentAudio(
       cleanedAudio,
       sampleRate: effectiveSampleRate.toDouble(),
       sensitivity: sensitivity,
+      instrument: instrument,
     );
 
     print('Detected ${notes.length} notes');
@@ -222,16 +223,43 @@ class AudioAnalysisService {
         return [];
       }
       
-      // Read PCM samples (assuming 16-bit little-endian)
+      // Read number of channels from WAV header (bytes 22-23)
+      int numChannels = 1;
+      try {
+        numChannels = bytes[22] | (bytes[23] << 8);
+        if (numChannels < 1 || numChannels > 8) {
+          print('Warning: Unexpected channel count $numChannels, defaulting to 1');
+          numChannels = 1;
+        }
+        print('WAV channel count: $numChannels');
+      } catch (e) {
+        print('Warning: Could not read channel count, defaulting to mono. Error: $e');
+      }
+
+      // Read PCM samples (assuming 16-bit little-endian), downmix to mono
       final samples = <double>[];
       try {
-        for (int i = dataOffset; i < bytes.length - 1; i += 2) {
-          // Read 16-bit signed integer (little-endian)
-          final int16 = bytes[i] | (bytes[i + 1] << 8);
-          // Convert to signed value
-          final signed = int16 > 32767 ? int16 - 65536 : int16;
-          // Normalize to -1.0 to 1.0
-          samples.add(signed / 32768.0);
+        final bytesPerSample = 2; // 16-bit
+        final frameSize = bytesPerSample * numChannels;
+        for (int i = dataOffset; i <= bytes.length - frameSize; i += frameSize) {
+          if (numChannels == 1) {
+            // Mono: read one sample directly
+            final int16 = bytes[i] | (bytes[i + 1] << 8);
+            final signed = int16 > 32767 ? int16 - 65536 : int16;
+            samples.add(signed / 32768.0);
+          } else {
+            // Stereo or multi-channel: average all channels to produce mono
+            double channelSum = 0.0;
+            for (int ch = 0; ch < numChannels; ch++) {
+              final offset = i + ch * bytesPerSample;
+              if (offset + 1 < bytes.length) {
+                final int16 = bytes[offset] | (bytes[offset + 1] << 8);
+                final signed = int16 > 32767 ? int16 - 65536 : int16;
+                channelSum += signed;
+              }
+            }
+            samples.add(channelSum / numChannels / 32768.0);
+          }
         }
       } catch (e) {
         print('Error reading PCM samples: $e');
@@ -289,15 +317,27 @@ class AudioAnalysisService {
     return cleaned;
   }
 
-  /// Spectral noise reduction - estimate noise floor and subtract it
+  /// Spectral noise reduction - estimate noise floor and subtract it.
+  ///
+  /// Uses the quietest short segment of the recording as the noise profile
+  /// rather than always using the very beginning, which may contain musical
+  /// content (e.g. the first plucked note).
   List<double> _applySpectralNoiseReduction(List<double> samples, {String sensitivity = 'high'}) {
-    // Use first 0.5 seconds as noise profile (assume silence/noise at start)
-    final noiseProfileLength = (sampleRate * 0.5).toInt().clamp(0, samples.length ~/  4);
-    
-    if (noiseProfileLength < 100) return samples;
-    
-    final noiseProfile = samples.sublist(0, noiseProfileLength);
-    final noiseRMS = _calculateRMS(noiseProfile);
+    // Find the quietest 20ms window across the first quarter of the file to
+    // use as a noise reference instead of always taking the very beginning.
+    final windowSize = (_lastDetectedSampleRate * 0.02).toInt().clamp(100, 2000);
+    final searchEnd = (samples.length ~/ 4).clamp(windowSize, samples.length);
+
+    double minWindowRMS = double.infinity;
+    for (int i = 0; i + windowSize <= searchEnd; i += windowSize) {
+      final window = samples.sublist(i, i + windowSize);
+      final rms = _calculateRMS(window);
+      if (rms < minWindowRMS) {
+        minWindowRMS = rms;
+      }
+    }
+
+    final noiseRMS = minWindowRMS.isFinite ? minWindowRMS : 0.0;
 
     // Tune how aggressively we treat low-level content as noise.
     double factor;
@@ -315,17 +355,23 @@ class AudioAnalysisService {
     }
 
     final noiseThreshold = noiseRMS * factor;
-    
+
+    // If the estimated noise floor is very low (essentially silence), skip
+    // the spectral subtraction step to avoid incorrectly attenuating quiet
+    // musical content that starts right at the beginning of the recording.
+    if (noiseThreshold < 0.001) {
+      print('    Noise floor too low (${noiseRMS.toStringAsFixed(5)}), skipping spectral subtraction');
+      return samples;
+    }
+
     print('    Noise floor RMS: ${noiseRMS.toStringAsFixed(4)}, Threshold: ${noiseThreshold.toStringAsFixed(4)}');
-    
-    // Apply spectral gating - reduce amplitudes below noise threshold more aggressively
+
+    // Apply spectral gating - reduce amplitudes below noise threshold
     return samples.map((s) {
       final amplitude = s.abs();
       if (amplitude < noiseThreshold) {
-        // Aggressive attenuation for noise
         return s * 0.1;
       } else {
-        // Keep signal, slightly boost to compensate
         return s * 1.1;
       }
     }).toList();
@@ -344,7 +390,7 @@ class AudioAnalysisService {
         break;
       case 'bass':
       case 'bass guitar':
-        lowCutoff = 41.0;    // E1 - lowest bass string
+        lowCutoff = 28.0;    // B0 - lowest note on 5-string bass
         highCutoff = 392.0;  // G4 - high bass notes
         break;
       case 'piano':

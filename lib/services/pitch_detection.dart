@@ -2,23 +2,30 @@ class PitchDetectionService {
     // Define frequency ranges for different instruments
     static const Map<String, List<double>> frequencyRanges = {
         'vocals': [85.0, 255.0],
-        'guitar': [82.0, 880.0],
+        'guitar': [75.0, 1400.0],
         'piano': [27.5, 4186.0],
-        // 4-string bass (E1–G4). Allow a bit above fundamentals
+        // 5-string bass (B0–G4). Allow a bit above fundamentals
         // to capture harmonics used in real recordings.
-        'bass': [40.0, 392.0],
+        'bass': [28.0, 400.0],
         'banjo': [146.8, 1760.0],
     };
 
     // Constants for Yin algorithm
-    static const double yinThreshold = 0.15; // Typical threshold value
+    static const double yinThreshold = 0.12; // Threshold for pitch detection
     static const int defaultSampleRate = 44100;
 
     /// Detects pitch using the Yin algorithm
     /// [audioSignal] - The input audio buffer
     /// [sampleRate] - The sample rate of the audio (default: 44100 Hz)
+    /// [minFrequency] - Minimum detectable frequency in Hz (default: 60 Hz)
+    /// [maxFrequency] - Maximum detectable frequency in Hz (default: 1400 Hz)
     /// Returns the detected frequency in Hz, or 0.0 if no pitch is detected
-    double detectPitch(List<double> audioSignal, {int sampleRate = defaultSampleRate}) {
+    double detectPitch(
+      List<double> audioSignal, {
+      int sampleRate = defaultSampleRate,
+      double minFrequency = 60.0,
+      double maxFrequency = 1400.0,
+    }) {
         if (audioSignal.isEmpty) {
             return 0.0;
         }
@@ -26,15 +33,24 @@ class PitchDetectionService {
         final bufferSize = audioSignal.length;
         final halfBufferSize = bufferSize ~/ 2;
 
+        // Calculate tau bounds from frequency range to avoid harmonics
+        // and reduce the search space for efficiency.
+        final minTau = (sampleRate / maxFrequency).ceil().clamp(2, halfBufferSize - 1);
+        final maxTau = (sampleRate / minFrequency).floor().clamp(minTau + 1, halfBufferSize - 1);
+
+        if (minTau >= maxTau) {
+            return 0.0;
+        }
+
         // Step 1: Calculate the difference function
-        final yinBuffer = List<double>.filled(halfBufferSize, 0.0);
-        _differenceFunction(audioSignal, yinBuffer);
+        final yinBuffer = List<double>.filled(maxTau + 1, 0.0);
+        _differenceFunction(audioSignal, yinBuffer, minTau, maxTau);
 
         // Step 2: Calculate the cumulative mean normalized difference function
-        _cumulativeMeanNormalizedDifference(yinBuffer);
+        _cumulativeMeanNormalizedDifference(yinBuffer, minTau, maxTau);
 
-        // Step 3: Find the absolute threshold
-        final tauEstimate = _absoluteThreshold(yinBuffer, yinThreshold);
+        // Step 3: Find the absolute threshold within the valid tau range
+        final tauEstimate = _absoluteThreshold(yinBuffer, yinThreshold, minTau, maxTau);
 
         if (tauEstimate == -1) {
             // No pitch detected
@@ -42,20 +58,19 @@ class PitchDetectionService {
         }
 
         // Step 4: Parabolic interpolation for better precision
-        final betterTau = _parabolicInterpolation(yinBuffer, tauEstimate);
+        final betterTau = _parabolicInterpolation(yinBuffer, tauEstimate, maxTau);
 
         // Convert tau to frequency
         return sampleRate / betterTau;
     }
 
-    /// Step 1: Calculate the difference function
-    /// d_t(tau) = sum of squared differences
-    void _differenceFunction(List<double> buffer, List<double> yinBuffer) {
-        final yinBufferSize = yinBuffer.length;
+    /// Step 1: Calculate the difference function (only for tau in [minTau, maxTau])
+    void _differenceFunction(List<double> buffer, List<double> yinBuffer, int minTau, int maxTau) {
+        final halfSize = yinBuffer.length ~/ 2;
 
-        for (int tau = 0; tau < yinBufferSize; tau++) {
+        for (int tau = minTau; tau <= maxTau; tau++) {
             double sum = 0.0;
-            for (int i = 0; i < yinBufferSize; i++) {
+            for (int i = 0; i < halfSize; i++) {
                 final delta = buffer[i] - buffer[i + tau];
                 sum += delta * delta;
             }
@@ -64,37 +79,46 @@ class PitchDetectionService {
     }
 
     /// Step 2: Calculate the cumulative mean normalized difference function
-    /// d'_t(tau) = d_t(tau) / [(1/tau) * sum(d_t(j)) for j=1 to tau]
-    void _cumulativeMeanNormalizedDifference(List<double> yinBuffer) {
+    void _cumulativeMeanNormalizedDifference(List<double> yinBuffer, int minTau, int maxTau) {
         yinBuffer[0] = 1.0;
         double runningSum = 0.0;
 
-        for (int tau = 1; tau < yinBuffer.length; tau++) {
+        // Accumulate from tau=1 to ensure correct normalization
+        for (int tau = 1; tau <= maxTau; tau++) {
             runningSum += yinBuffer[tau];
-            yinBuffer[tau] *= tau / runningSum;
+            if (runningSum > 0.0) {
+                yinBuffer[tau] *= tau / runningSum;
+            } else {
+                yinBuffer[tau] = 1.0;
+            }
         }
     }
 
-    /// Step 3: Find the first local minimum below the threshold
+    /// Step 3: Find the first local minimum below the threshold in [minTau, maxTau]
     /// Returns the tau (lag) value, or -1 if no pitch is found
-    int _absoluteThreshold(List<double> yinBuffer, double threshold) {
-        // Start from tau = 2 to avoid the trivial solution at tau = 0
-        for (int tau = 2; tau < yinBuffer.length; tau++) {
+    int _absoluteThreshold(List<double> yinBuffer, double threshold, int minTau, int maxTau) {
+        for (int tau = minTau; tau <= maxTau; tau++) {
             if (yinBuffer[tau] < threshold) {
-                // Check if this is a local minimum
-                while (tau + 1 < yinBuffer.length && yinBuffer[tau + 1] < yinBuffer[tau]) {
+                while (tau + 1 <= maxTau && yinBuffer[tau + 1] < yinBuffer[tau]) {
                     tau++;
                 }
                 return tau;
             }
         }
-        return -1;
+        // Fall back to global minimum in range if nothing is below threshold
+        int bestTau = minTau;
+        for (int tau = minTau + 1; tau <= maxTau; tau++) {
+            if (yinBuffer[tau] < yinBuffer[bestTau]) {
+                bestTau = tau;
+            }
+        }
+        // Accept if the minimum is reasonably low
+        return yinBuffer[bestTau] < 0.5 ? bestTau : -1;
     }
 
     /// Step 4: Parabolic interpolation for better frequency resolution
-    /// Uses three points around the minimum to estimate a more precise tau
-    double _parabolicInterpolation(List<double> yinBuffer, int tauEstimate) {
-        if (tauEstimate == 0 || tauEstimate >= yinBuffer.length - 1) {
+    double _parabolicInterpolation(List<double> yinBuffer, int tauEstimate, int maxTau) {
+        if (tauEstimate <= 0 || tauEstimate >= maxTau) {
             return tauEstimate.toDouble();
         }
 
@@ -102,16 +126,14 @@ class PitchDetectionService {
         final s1 = yinBuffer[tauEstimate];
         final s2 = yinBuffer[tauEstimate + 1];
 
-        // Parabolic interpolation formula
         final denominator = 2 * (2 * s1 - s2 - s0);
-        
-        // Avoid division by zero when points form a horizontal line
+
         if (denominator.abs() < 1e-10) {
             return tauEstimate.toDouble();
         }
-        
+
         final adjustment = (s2 - s0) / denominator;
-        
+
         return tauEstimate + adjustment;
     }
 
