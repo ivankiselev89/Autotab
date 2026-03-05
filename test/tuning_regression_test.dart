@@ -3,6 +3,11 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:autotab/services/audio_analysis_service.dart';
 
+// Global accumulators for a simple summary at the end of the run.
+final List<String> _successfulTests = <String>[];
+final List<String> _failedTests = <String>[];
+final Map<String, List<String>> _detectedNotesByTest = <String, List<String>>{};
+
 class TuningTestCase {
   final String description;
   final String wavPath;
@@ -34,7 +39,7 @@ void main() {
     // specify chords via expectedChords where each inner list is a
     // simultaneous set of notes that should be present (e.g. ['C4','E4','G4']).
     //
-     const cases = <TuningTestCase>[
+    const cases = <TuningTestCase>[
        TuningTestCase(
          description: 'Guitar open E string High',
          wavPath: 'test_resources/tuning/E2.wav',
@@ -212,7 +217,7 @@ void main() {
          sensitivity: 'high',
          expectedNotes: ['D3', 'E3', 'F3', 'C3', 'D3', 'E3', 'B2', 'C3', 'B2'],
        )
-     ];
+    ];
 
     if (cases.isEmpty) {
       test('no tuning regression cases configured yet', () {
@@ -238,25 +243,29 @@ void main() {
         expect(result.notes, isNotEmpty,
             reason: 'No notes detected for ${testCase.description}');
 
-        // Validate expected single-note sequence (if provided)
+        // Capture all detected notes for this test (for logging/summary).
         final detectedSequence =
             result.notes.map((n) => '${n.noteName}${n.octave}').toList();
+        _detectedNotesByTest[testCase.description] = detectedSequence;
+
+        // Validate expected single-note sequence (if provided)
+        bool notesMatch = true;
+        final reasons = <String>[];
 
         if (testCase.expectedNotes.isNotEmpty) {
-          final ok = _containsOrderedSubsequence(
+          notesMatch = _containsOrderedSubsequence(
             haystack: detectedSequence,
             needle: testCase.expectedNotes,
           );
 
-          expect(
-            ok,
-            isTrue,
-            reason:
-                'Expected sequence ${testCase.expectedNotes} not found in detected notes for ${testCase.description}.\nDetected: $detectedSequence',
-          );
+          if (!notesMatch) {
+            reasons.add(
+                'Expected sequence ${testCase.expectedNotes} not found. Detected: $detectedSequence');
+          }
         }
 
         // Validate expected chords (simultaneous notes) if provided.
+        bool chordsMatch = true;
         if (testCase.expectedChords.isNotEmpty) {
           final chordGroups = _groupNotesByTime(result.notes);
 
@@ -273,16 +282,66 @@ void main() {
               (detectedSet) => expectedSet.every(detectedSet.contains),
             );
 
-            expect(
-              foundMatch,
-              isTrue,
-              reason:
-                  'Expected chord $expectedChord not found in detected chords for ${testCase.description}.\nDetected chord sets: $detectedChordSets',
-            );
+            if (!foundMatch) {
+              chordsMatch = false;
+              reasons.add(
+                  'Expected chord $expectedChord not found. Detected chord sets: $detectedChordSets');
+            }
           }
         }
+
+        final success = notesMatch && chordsMatch;
+
+        if (success) {
+          _successfulTests.add(testCase.description);
+          // Print detected notes on success to make it easy to see what
+          // the pipeline produced.
+          // This also serves as a quick sanity check when tuning.
+          // Example output: SUCCESS [TestName]: E2, A2, D3
+          //
+          // Using print instead of debug log so it always shows in test
+          // output.
+          print('SUCCESS [${testCase.description}]: $detectedSequence');
+        } else {
+          _failedTests.add(testCase.description);
+          print('FAIL    [${testCase.description}]: $detectedSequence');
+        }
+
+        expect(
+          success,
+          isTrue,
+          reason: reasons.isEmpty
+              ? 'Tuning regression failed for ${testCase.description}'
+              : reasons.join('\n'),
+        );
       });
     }
+
+    tearDownAll(() {
+      print('');
+      print('==== TUNING REGRESSION SUMMARY ====');
+      print('Total tests   : ${_successfulTests.length + _failedTests.length}');
+      print('Succeeded     : ${_successfulTests.length}');
+      print('Failed        : ${_failedTests.length}');
+
+      if (_successfulTests.isNotEmpty) {
+        print('\nSuccessful tests and detected notes:');
+        for (final name in _successfulTests) {
+          final notes = _detectedNotesByTest[name] ?? const <String>[];
+          print('  ✔ $name -> $notes');
+        }
+      }
+
+      if (_failedTests.isNotEmpty) {
+        print('\nFailed tests and detected notes:');
+        for (final name in _failedTests) {
+          final notes = _detectedNotesByTest[name] ?? const <String>[];
+          print('  ✘ $name -> $notes');
+        }
+      }
+
+      print('====================================');
+    });
   });
 }
 
