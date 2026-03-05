@@ -6,63 +6,55 @@ class NoteSegmentationService {
   final PitchDetectionService _pitchDetection = PitchDetectionService();
   
   // Configuration parameters for onset detection
-  // Make onset detection more sensitive so that quiet or soft notes
-  // are still picked up as candidates.
-  static const double onsetThreshold = 0.05; // Amplitude threshold for note onset (more sensitive)
   static const int hopSize = 512; // Number of samples to skip between frames
   static const int frameSize = 2048; // Window size for analysis
-  static const double minNoteDuration = 0.02; // Allow slightly shorter notes to be considered
-  // Maximum number of samples to use for pitch detection per segment to
-  // avoid extremely expensive computations on very long segments.
-  static const int maxPitchSamples = 4096;
+  // Use a larger window for pitch detection to support low-frequency notes
+  // (e.g. B0 = 30.87 Hz needs >= ~3110 samples at 48 kHz for two full periods).
+  static const int maxPitchSamples = 8192;
   
   /// Segments continuous audio into individual notes with timing and frequency information.
-  /// 
-  /// Uses onset detection to identify note boundaries and pitch detection to determine frequencies.
-  /// Returns a list of Note objects with timing, frequency, and pitch information.
   List<Note> segmentAudio(
     List<double> audioData, {
     double sampleRate = 44100.0,
     String sensitivity = 'high',
+    String instrument = 'guitar',
   }) {
     if (audioData.isEmpty) {
       return [];
     }
     
+    // Derive instrument-specific frequency range for pitch detection.
+    final freqRange = _instrumentFrequencyRange(instrument);
+    final minFreq = freqRange[0];
+    final maxFreq = freqRange[1];
+
     List<Note> notes = [];
     
-    // Step 1: Detect note onsets using energy-based method
+    // Detect note onsets using a combination of energy and spectral flux.
     final onsets = _detectOnsets(audioData, sampleRate, sensitivity: sensitivity);
     
-    // Step 2: For each onset, extract the note segment and detect its pitch
     for (int i = 0; i < onsets.length; i++) {
       final startSample = onsets[i];
       final endSample = (i < onsets.length - 1) 
           ? onsets[i + 1] 
           : audioData.length;
       
-      // Extract the segment
       var segment = audioData.sublist(startSample, endSample);
       
-      // Skip very short segments. Sensitivity influences how short
-      // a segment we will still keep as a potential note.
       final duration = (endSample - startSample) / sampleRate;
       double minDuration;
       switch (sensitivity.toLowerCase()) {
         case 'low':
-          minDuration = 0.04; // prefer longer, cleaner notes
+          minDuration = 0.04;
           break;
         case 'medium':
           minDuration = 0.03;
           break;
         case 'high':
         default:
-          minDuration = 0.02; // allow very short notes
+          minDuration = 0.02;
           break;
       }
-      // For the very first and very last segments, be more lenient so we
-      // don't accidentally swallow the attack of the first note or the
-      // release of the final note.
       final bool isEdgeSegment = (i == 0 || i == onsets.length - 1);
       final double effectiveMinDuration = isEdgeSegment ? (minDuration * 0.5) : minDuration;
 
@@ -70,9 +62,9 @@ class NoteSegmentationService {
         continue;
       }
       
-      // Limit the segment length used for pitch detection to keep the
-      // Yin algorithm performant even on long sustained notes. For
-      // very long segments we analyze only a centered window.
+      // For pitch detection, use a centered window within the segment to
+      // analyze the stable sustain portion rather than the transient attack.
+      // This gives more reliable pitch estimates for notes with slow attacks.
       if (segment.length > maxPitchSamples) {
         final center = segment.length ~/ 2;
         final halfWindow = maxPitchSamples ~/ 2;
@@ -81,14 +73,17 @@ class NoteSegmentationService {
         segment = segment.sublist(start, end);
       }
 
-      // First, attempt to detect multiple simultaneous pitches (simple chord support)
-      final chordFrequencies = _detectChordFrequencies(segment, sampleRate: sampleRate);
+      // Try multi-pitch (chord) detection first.
+      final chordFrequencies = _detectChordFrequencies(
+        segment,
+        sampleRate: sampleRate,
+        minFreq: minFreq,
+        maxFreq: maxFreq,
+      );
 
-      // Calculate confidence based on signal strength once for this segment
       final confidence = _calculateConfidence(segment);
 
       if (chordFrequencies.isNotEmpty) {
-        // Create a note for each detected fundamental in the chord
         for (final freq in chordFrequencies) {
           final noteInfo = _frequencyToNote(freq);
           notes.add(Note(
@@ -101,15 +96,18 @@ class NoteSegmentationService {
           ));
         }
       } else {
-        // Fallback to monophonic pitch detection (Yin)
-        final frequency = _pitchDetection.detectPitch(segment, sampleRate: sampleRate.toInt());
+        // Fall back to monophonic YIN pitch detection.
+        final frequency = _pitchDetection.detectPitch(
+          segment,
+          sampleRate: sampleRate.toInt(),
+          minFrequency: minFreq,
+          maxFrequency: maxFreq,
+        );
         
-        // Skip segments with no detectable pitch
         if (frequency == 0.0) {
           continue;
         }
         
-        // Convert frequency to note name and octave
         final noteInfo = _frequencyToNote(frequency);
         
         notes.add(Note(
@@ -126,121 +124,210 @@ class NoteSegmentationService {
     return notes;
   }
   
-  /// Detects note onsets using energy-based method
-  /// Returns list of sample indices where onsets occur
+  /// Returns [minFreq, maxFreq] for the given instrument.
+  List<double> _instrumentFrequencyRange(String instrument) {
+    switch (instrument.toLowerCase()) {
+      case 'guitar':
+        return [75.0, 1400.0];
+      case 'bass':
+      case 'bass guitar':
+        return [28.0, 400.0];
+      case 'banjo':
+        return [146.8, 1760.0];
+      case 'piano':
+        return [27.5, 4186.0];
+      default:
+        return [60.0, 2000.0];
+    }
+  }
+
+  /// Detects note onsets using a combination of energy-based and spectral-flux methods.
   List<int> _detectOnsets(
     List<double> audioData,
     double sampleRate, {
     String sensitivity = 'high',
   }) {
-    List<int> onsets = [];
-    
-    // Calculate energy for each frame
+    // --- Energy-based onset detection ---
     final energies = <double>[];
     for (int i = 0; i < audioData.length - frameSize; i += hopSize) {
-      final frame = audioData.sublist(i, math.min(i + frameSize, audioData.length));
-      final energy = _calculateEnergy(frame);
-      energies.add(energy);
+      final end = math.min(i + frameSize, audioData.length);
+      final frame = audioData.sublist(i, end);
+      energies.add(_calculateEnergy(frame));
     }
-    
-    if (energies.isEmpty) {
-      return onsets;
-    }
-    
-    // Calculate adaptive threshold based on local energy and sensitivity
+
+    if (energies.isEmpty) return [0];
+
     final meanEnergy = energies.reduce((a, b) => a + b) / energies.length;
     double onsetFactor;
     switch (sensitivity.toLowerCase()) {
       case 'low':
-        onsetFactor = 1.4; // require stronger onsets
+        onsetFactor = 1.4;
         break;
       case 'medium':
         onsetFactor = 1.0;
         break;
       case 'high':
       default:
-        onsetFactor = 0.7; // more sensitive
+        onsetFactor = 0.7;
         break;
     }
-    final threshold = meanEnergy * onsetThreshold * onsetFactor;
-    
-    // Detect onsets as points where energy exceeds threshold
-    bool inNote = false;
-    for (int i = 1; i < energies.length; i++) {
-      final currentEnergy = energies[i];
-      final prevEnergy = energies[i - 1];
-      
-      // Onset: energy increases above threshold. Sensitivity influences
-      // how much increase over previous frame we require.
-      double jumpFactor;
-      switch (sensitivity.toLowerCase()) {
-        case 'low':
-          jumpFactor = 1.6;
-          break;
-        case 'medium':
-          jumpFactor = 1.3;
-          break;
-        case 'high':
-        default:
-          jumpFactor = 1.15;
-          break;
-      }
+    final energyThreshold = meanEnergy * 0.05 * onsetFactor;
 
-      if (!inNote && currentEnergy > threshold && currentEnergy > prevEnergy * jumpFactor) {
-        onsets.add(i * hopSize);
+    final energyOnsets = <int>[];
+    bool inNote = false;
+    double jumpFactor;
+    switch (sensitivity.toLowerCase()) {
+      case 'low':
+        jumpFactor = 1.6;
+        break;
+      case 'medium':
+        jumpFactor = 1.3;
+        break;
+      case 'high':
+      default:
+        jumpFactor = 1.15;
+        break;
+    }
+    for (int i = 1; i < energies.length; i++) {
+      final curr = energies[i];
+      final prev = energies[i - 1];
+      if (!inNote && curr > energyThreshold && curr > prev * jumpFactor) {
+        energyOnsets.add(i * hopSize);
         inNote = true;
-      }
-      // Offset: energy drops below threshold
-      else if (inNote && currentEnergy < threshold * 0.5) {
+      } else if (inNote && curr < energyThreshold * 0.5) {
         inNote = false;
       }
     }
-    
-    // Add first onset if not already detected
-    if (onsets.isEmpty && energies.first > threshold) {
-      onsets.add(0);
+
+    // --- Spectral-flux onset detection ---
+    // Half-wave rectified spectral flux: captures onset of new notes even when
+    // the overall energy does not drop between consecutive notes.
+    final spectralFluxOnsets = <int>[];
+    List<double>? prevSpectrum;
+    final fluxValues = <double>[];
+    final fluxIndices = <int>[];
+    for (int i = 0; i < audioData.length - frameSize; i += hopSize) {
+      final end = math.min(i + frameSize, audioData.length);
+      final frame = audioData.sublist(i, end);
+      final spectrum = _computeMagnitudeSpectrum(frame);
+      if (prevSpectrum != null) {
+        double flux = 0.0;
+        for (int k = 0; k < spectrum.length && k < prevSpectrum.length; k++) {
+          final diff = spectrum[k] - prevSpectrum[k];
+          if (diff > 0) flux += diff;
+        }
+        fluxValues.add(flux);
+        fluxIndices.add(i);
+      }
+      prevSpectrum = spectrum;
     }
 
-    // If we detected at least one onset but the first one starts some
-    // distance into the signal, add an onset at 0 so that we do not lose
-    // a strong initial note attack.
-    if (onsets.isNotEmpty && onsets.first > 0) {
-      onsets.insert(0, 0);
+    if (fluxValues.isNotEmpty) {
+      final maxFlux = fluxValues.reduce(math.max);
+      if (maxFlux > 0) {
+        final localWindow = (0.5 * sampleRate / hopSize).round().clamp(5, 40);
+        double fluxFactor;
+        switch (sensitivity.toLowerCase()) {
+          case 'low':
+            fluxFactor = 2.0;
+            break;
+          case 'medium':
+            fluxFactor = 1.2;
+            break;
+          case 'high':
+          default:
+            fluxFactor = 0.7;
+            break;
+        }
+
+        for (int i = 1; i < fluxValues.length - 1; i++) {
+          final winStart = math.max(0, i - localWindow);
+          final winEnd = math.min(fluxValues.length, i + localWindow + 1);
+          double localMean = 0.0;
+          for (int j = winStart; j < winEnd; j++) {
+            localMean += fluxValues[j];
+          }
+          localMean /= (winEnd - winStart);
+
+          final localThreshold = localMean * fluxFactor + maxFlux * 0.02;
+
+          if (fluxValues[i] > localThreshold &&
+              fluxValues[i] >= fluxValues[i - 1] &&
+              fluxValues[i] >= fluxValues[i + 1]) {
+            spectralFluxOnsets.add(fluxIndices[i]);
+          }
+        }
+      }
     }
-    
-    return onsets;
+
+    // --- Merge both onset sets ---
+    final minGapSamples = (0.08 * sampleRate).round();
+    final allOnsets = <int>{...energyOnsets, ...spectralFluxOnsets}.toList()
+      ..sort();
+
+    final merged = <int>[];
+    for (final o in allOnsets) {
+      if (merged.isEmpty || (o - merged.last) >= minGapSamples) {
+        merged.add(o);
+      }
+    }
+
+    // Always ensure we consider the very beginning of the recording.
+    if (merged.isEmpty || merged.first > 0) {
+      merged.insert(0, 0);
+    }
+
+    return merged;
+  }
+
+  /// Computes half-spectrum magnitudes using a DFT on the given frame.
+  List<double> _computeMagnitudeSpectrum(List<double> frame) {
+    final n = frame.length;
+    final half = n ~/ 2;
+    final magnitudes = List<double>.filled(half, 0.0);
+    for (int k = 0; k < half; k++) {
+      double real = 0.0;
+      double imag = 0.0;
+      final twoPiKOverN = 2.0 * math.pi * k / n;
+      for (int t = 0; t < n; t++) {
+        final angle = twoPiKOverN * t;
+        real += frame[t] * math.cos(angle);
+        imag -= frame[t] * math.sin(angle);
+      }
+      magnitudes[k] = math.sqrt(real * real + imag * imag);
+    }
+    return magnitudes;
   }
   
   /// Calculates the energy (RMS) of a signal frame
   double _calculateEnergy(List<double> frame) {
-    if (frame.isEmpty) {
-      return 0.0;
-    }
-    
+    if (frame.isEmpty) return 0.0;
     double sum = 0.0;
     for (final sample in frame) {
       sum += sample * sample;
     }
-    
     return math.sqrt(sum / frame.length);
   }
   
   /// Calculates confidence score based on signal strength (0.0 to 1.0)
   double _calculateConfidence(List<double> segment) {
     final energy = _calculateEnergy(segment);
-    // Normalize to 0-1 range (assuming max RMS of 1.0 for normalized audio)
     return math.min(energy * 2.0, 1.0);
   }
 
-  /// Detect up to a few simultaneous fundamental frequencies in a segment
-  /// using a simple spectral peak analysis. This provides basic chord
-  /// support by allowing multiple Note objects with the same time range.
-  List<double> _detectChordFrequencies(List<double> segment, {double sampleRate = 44100.0}) {
-    // Use a limited window for analysis to keep things performant
+  /// Detect simultaneous fundamental frequencies (chord support) using a
+  /// DFT-based spectral peak analysis with harmonic filtering.
+  ///
+  /// Returns an empty list when no clear chord structure is found; in that
+  /// case the caller should fall back to monophonic YIN detection.
+  List<double> _detectChordFrequencies(
+    List<double> segment, {
+    double sampleRate = 44100.0,
+    double minFreq = 60.0,
+    double maxFreq = 2000.0,
+  }) {
     final length = math.min(maxPitchSamples, segment.length);
-    if (length < 512) {
-      return [];
-    }
+    if (length < 512) return [];
 
     // Apply a Hann window to reduce spectral leakage
     final windowed = List<double>.generate(length, (n) {
@@ -254,43 +341,35 @@ class NoteSegmentationService {
     for (int k = 0; k < half; k++) {
       double real = 0.0;
       double imag = 0.0;
-      final double twoPiKOverN = 2.0 * math.pi * k / length;
+      final twoPiKOverN = 2.0 * math.pi * k / length;
       for (int n = 0; n < length; n++) {
-        final sample = windowed[n];
-        final angle = twoPiKOverN * n;
-        real += sample * math.cos(angle);
-        imag -= sample * math.sin(angle);
+        real += windowed[n] * math.cos(twoPiKOverN * n);
+        imag -= windowed[n] * math.sin(twoPiKOverN * n);
       }
       magnitudes[k] = math.sqrt(real * real + imag * imag);
     }
 
     final maxMag = magnitudes.fold<double>(0.0, (m, v) => v > m ? v : m);
-    if (maxMag <= 0.0) {
-      return [];
-    }
+    if (maxMag <= 0.0) return [];
 
-    const double minFreq = 60.0;  // Ignore very low rumbles
-    const double maxFreq = 2000.0; // Focus on typical musical range
-
-    // Find local peaks that are a reasonable fraction of the max
+    // Collect spectral peaks within the instrument's frequency range.
+    // Use a lower relative threshold (10%) so that fundamentals are not
+    // missed when their harmonics dominate the spectrum.
     final candidates = <Map<String, double>>[];
     for (int k = 1; k < half - 1; k++) {
       final freq = k * sampleRate / length;
       if (freq < minFreq || freq > maxFreq) continue;
 
       final mag = magnitudes[k];
-      if (mag <= maxMag * 0.3) continue;
+      if (mag <= maxMag * 0.10) continue;
 
       if (mag > magnitudes[k - 1] && mag >= magnitudes[k + 1]) {
         candidates.add({'freq': freq, 'mag': mag});
       }
     }
 
-    if (candidates.isEmpty) {
-      return [];
-    }
+    if (candidates.isEmpty) return [];
 
-    // Sort by magnitude descending
     candidates.sort((a, b) => (b['mag']! - a['mag']!).sign.toInt());
 
     final fundamentals = <double>[];
@@ -298,10 +377,8 @@ class NoteSegmentationService {
     bool isHarmonicOfExisting(double f) {
       for (final base in fundamentals) {
         final ratio = f / base;
-        for (int n = 1; n <= 6; n++) {
-          if ((ratio - n).abs() < 0.08) {
-            return true; // likely a harmonic, not a new note
-          }
+        for (int n = 2; n <= 8; n++) {
+          if ((ratio - n).abs() < 0.08) return true;
         }
       }
       return false;
@@ -310,44 +387,71 @@ class NoteSegmentationService {
     bool isTooCloseToExisting(double f) {
       for (final base in fundamentals) {
         final semitoneDiff = (12.0 * (math.log(f / base) / math.log(2))).abs();
-        if (semitoneDiff < 0.8) {
-          return true; // within ~1 semitone of an existing note
-        }
+        if (semitoneDiff < 0.8) return true;
       }
       return false;
     }
 
     for (final c in candidates) {
       final f = c['freq']!;
-      if (isHarmonicOfExisting(f) || isTooCloseToExisting(f)) {
-        continue;
-      }
+      if (isHarmonicOfExisting(f) || isTooCloseToExisting(f)) continue;
       fundamentals.add(f);
-      if (fundamentals.length >= 3) break; // limit chord size
+      if (fundamentals.length >= 4) break;
+    }
+
+    // Only return chord results when 2 or more independent fundamentals are
+    // found.  A single candidate should be handled by the YIN fallback which
+    // is more reliable for monophonic content.
+    if (fundamentals.length < 2) return [];
+
+    // Check whether any pair of found fundamentals is better explained as
+    // harmonics of a single common sub-fundamental.  When that sub-fundamental
+    // falls within the instrument's valid frequency range, the signal is a
+    // single note (not a chord) and YIN should handle it.
+    for (int i = 0; i < fundamentals.length; i++) {
+      for (int j = i + 1; j < fundamentals.length; j++) {
+        if (_findCommonFundamental(fundamentals[i], fundamentals[j], minFreq) != null) {
+          return [];
+        }
+      }
     }
 
     return fundamentals;
   }
+
+  /// If [f1] and [f2] are both harmonics of a single sub-fundamental that is
+  /// at least [minFreq] Hz, returns that sub-fundamental frequency.
+  /// Returns null if no such relationship is found within the search bounds.
+  double? _findCommonFundamental(double f1, double f2, double minFreq) {
+    final lower = f1 < f2 ? f1 : f2;
+    final upper = f1 < f2 ? f2 : f1;
+    const double tolerance = 0.06;
+    for (int m = 1; m < 10; m++) {
+      for (int n = m + 1; n < 12; n++) {
+        final ratio = n / m;
+        if ((upper / lower - ratio).abs() < tolerance * ratio) {
+          final f0 = lower / m;
+          if (f0 >= minFreq) return f0;
+        }
+      }
+    }
+    return null;
+  }
   
   /// Converts frequency to musical note name and octave
-  /// Returns a map with 'name' and 'octave' keys
   Map<String, String> _frequencyToNote(double frequency) {
     if (frequency <= 0) {
       return {'name': 'N/A', 'octave': '0'};
     }
     
-    // A4 = 440 Hz is our reference
     const double a4Frequency = 440.0;
     const int a4MidiNote = 69;
     
-    // Calculate MIDI note number
     final midiNote = (12 * (math.log(frequency / a4Frequency) / math.log(2)) + a4MidiNote).round();
     
-    // Calculate octave and note within octave
-    final octave = (midiNote ~/ 12) - 1; // Use integer division
+    final octave = (midiNote ~/ 12) - 1;
     final noteIndex = midiNote % 12;
     
-    // Note names
     const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     final noteName = noteNames[noteIndex];
     
