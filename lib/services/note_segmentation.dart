@@ -83,6 +83,11 @@ class NoteSegmentationService {
 
       final confidence = _calculateConfidence(segment);
 
+      // Skip segments with very low confidence (likely noise or silence).
+      if (confidence < 0.01) {
+        continue;
+      }
+
       if (chordFrequencies.isNotEmpty) {
         for (final freq in chordFrequencies) {
           final noteInfo = _frequencyToNote(freq);
@@ -121,7 +126,79 @@ class NoteSegmentationService {
       }
     }
     
-    return notes;
+    return _postProcessNotes(notes);
+  }
+
+  /// Merges consecutive identical notes and removes isolated spurious
+  /// detections (e.g. harmonics that flicker for a single segment).
+  List<Note> _postProcessNotes(List<Note> notes) {
+    if (notes.length <= 1) return notes;
+
+    // Step 1: Merge consecutive notes that have the same name+octave.
+    final merged = <Note>[notes.first];
+    for (int i = 1; i < notes.length; i++) {
+      final prev = merged.last;
+      final curr = notes[i];
+      if (curr.noteName == prev.noteName && curr.octave == prev.octave) {
+        // Extend the previous note to cover the current one.
+        prev.endTime = curr.endTime;
+        prev.confidence = math.max(prev.confidence, curr.confidence);
+      } else {
+        merged.add(curr);
+      }
+    }
+
+    if (merged.length <= 2) return merged;
+
+    // Step 2: Remove isolated spurious notes.  A note is "isolated" when it
+    // appears only once, is very short relative to its neighbours, and its
+    // neighbours share the same identity (i.e. the isolated note is a brief
+    // flicker between two occurrences of the real note).
+    final cleaned = <Note>[merged.first];
+    for (int i = 1; i < merged.length - 1; i++) {
+      final prev = merged[i - 1];
+      final curr = merged[i];
+      final next = merged[i + 1];
+
+      final currDuration = curr.endTime - curr.startTime;
+      final prevDuration = prev.endTime - prev.startTime;
+      final nextDuration = next.endTime - next.startTime;
+
+      final neighboursSame =
+          prev.noteName == next.noteName && prev.octave == next.octave;
+
+      // If the current note is very short relative to its neighbours and
+      // those neighbours are the same note, this is likely a spurious
+      // harmonic detection – drop it.
+      if (neighboursSame &&
+          currDuration < 0.15 &&
+          currDuration < prevDuration * 0.5 &&
+          currDuration < nextDuration * 0.5) {
+        // Drop the spurious note; extend previous to bridge the gap.
+        cleaned.last.endTime = next.startTime;
+        continue;
+      }
+
+      cleaned.add(curr);
+    }
+    cleaned.add(merged.last);
+
+    // Step 3: Merge again after removing spurious notes (neighbours may now
+    // be identical after the gap was bridged).
+    if (cleaned.length <= 1) return cleaned;
+    final result = <Note>[cleaned.first];
+    for (int i = 1; i < cleaned.length; i++) {
+      final prev = result.last;
+      final curr = cleaned[i];
+      if (curr.noteName == prev.noteName && curr.octave == prev.octave) {
+        prev.endTime = curr.endTime;
+        prev.confidence = math.max(prev.confidence, curr.confidence);
+      } else {
+        result.add(curr);
+      }
+    }
+
+    return result;
   }
   
   /// Returns [minFreq, maxFreq] for the given instrument.
@@ -261,7 +338,22 @@ class NoteSegmentationService {
     }
 
     // --- Merge both onset sets ---
-    final minGapSamples = (0.08 * sampleRate).round();
+    // Use a sensitivity-dependent minimum gap to avoid over-segmenting
+    // sustained notes into many tiny slices.
+    double minGapSeconds;
+    switch (sensitivity.toLowerCase()) {
+      case 'low':
+        minGapSeconds = 0.20;
+        break;
+      case 'medium':
+        minGapSeconds = 0.14;
+        break;
+      case 'high':
+      default:
+        minGapSeconds = 0.10;
+        break;
+    }
+    final minGapSamples = (minGapSeconds * sampleRate).round();
     final allOnsets = <int>{...energyOnsets, ...spectralFluxOnsets}.toList()
       ..sort();
 
