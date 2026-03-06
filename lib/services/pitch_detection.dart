@@ -64,11 +64,16 @@ class PitchDetectionService {
         return sampleRate / betterTau;
     }
 
-    /// Step 1: Calculate the difference function (only for tau in [minTau, maxTau])
+    /// Step 1: Calculate the difference function for tau in [1, maxTau].
+    /// Computing from tau=1 (not minTau) is required so that the cumulative
+    /// mean normalisation in step 2 uses the correct running sum.
+    /// Using buffer.length/2 (not yinBuffer.length/2) as the correlation
+    /// window gives many more reference samples, which is critical for low
+    /// fundamental frequencies whose period can exceed yinBuffer.length/2.
     void _differenceFunction(List<double> buffer, List<double> yinBuffer, int minTau, int maxTau) {
-        final halfSize = yinBuffer.length ~/ 2;
+        final halfSize = buffer.length ~/ 2;
 
-        for (int tau = minTau; tau <= maxTau; tau++) {
+        for (int tau = 1; tau <= maxTau; tau++) {
             double sum = 0.0;
             for (int i = 0; i < halfSize; i++) {
                 final delta = buffer[i] - buffer[i + tau];
@@ -112,8 +117,9 @@ class PitchDetectionService {
                 bestTau = tau;
             }
         }
-        // Accept if the minimum is reasonably low
-        return yinBuffer[bestTau] < 0.5 ? bestTau : -1;
+        // Accept if the minimum is reasonably low (stricter than threshold to
+        // reduce false detections when there is no clear pitch).
+        return yinBuffer[bestTau] < 0.35 ? bestTau : -1;
     }
 
     /// Step 4: Parabolic interpolation for better frequency resolution

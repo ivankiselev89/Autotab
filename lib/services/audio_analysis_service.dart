@@ -380,37 +380,39 @@ class AudioAnalysisService {
   /// Apply instrument-specific band-pass filter
   /// Filters to only the frequency range of the target instrument
   List<double> _applyInstrumentFilter(List<double> samples, String instrument) {
-    // Define frequency ranges for each instrument (Hz)
+    // Define frequency ranges for each instrument (Hz).
+    // Set the low cutoff significantly below the instrument's lowest note so
+    // that the first-order IIR roll-off does not attenuate the fundamental.
     double lowCutoff, highCutoff;
     
     switch (instrument.toLowerCase()) {
       case 'guitar':
-        lowCutoff = 82.0;    // E2 - lowest guitar string
-        highCutoff = 1318.0; // E6 - high notes on guitar
+        lowCutoff = 65.0;    // Well below E2 (82.4 Hz) - lowest guitar string
+        highCutoff = 1400.0; // Slightly above E6 for brightness
         break;
       case 'bass':
       case 'bass guitar':
-        lowCutoff = 28.0;    // B0 - lowest note on 5-string bass
-        highCutoff = 392.0;  // G4 - high bass notes
+        lowCutoff = 22.0;    // Well below B0 (30.9 Hz) - lowest note on 5-string bass
+        highCutoff = 420.0;  // G4 - high bass notes
         break;
       case 'piano':
-        lowCutoff = 27.5;    // A0 - lowest piano key
-        highCutoff = 4186.0; // C8 - highest piano key
+        lowCutoff = 20.0;    // Below A0 (27.5 Hz)
+        highCutoff = 4200.0; // C8 - highest piano key
         break;
       case 'violin':
-        lowCutoff = 196.0;   // G3 - lowest violin string
-        highCutoff = 3136.0; // G7 - high violin notes
+        lowCutoff = 160.0;   // Below G3 (196 Hz) - lowest violin string
+        highCutoff = 3200.0; // G7 - high violin notes
         break;
       case 'banjo':
-        lowCutoff = 146.8;   // D3 - lowest standard banjo string
-        highCutoff = 1760.0; // A6 - typical high banjo range
+        lowCutoff = 120.0;   // Below D3 (146.8 Hz) - lowest standard banjo string
+        highCutoff = 1800.0; // A6 - typical high banjo range
         break;
       case 'drums':
-        lowCutoff = 60.0;    // Low drums
+        lowCutoff = 50.0;    // Low drums
         highCutoff = 8000.0; // Cymbals and high percussion
         break;
       default:
-        lowCutoff = 80.0;    // Default: general musical range
+        lowCutoff = 60.0;    // Default: general musical range
         highCutoff = 2000.0;
     }
     
@@ -497,7 +499,8 @@ class AudioAnalysisService {
   List<double> _applyHighPassFilter(List<double> samples, {double cutoffFreq = 80.0}) {
     // First-order high-pass filter (IIR)
     // RC = 1 / (2 * pi * cutoffFreq)
-    const dt = 1.0 / sampleRate;
+    // Use the actual detected sample rate so the cutoff frequency is accurate.
+    final dt = 1.0 / _lastDetectedSampleRate;
     final rc = 1.0 / (2.0 * math.pi * cutoffFreq);
     final alpha = rc / (rc + dt);
 
@@ -513,7 +516,8 @@ class AudioAnalysisService {
   /// Low-pass filter to remove high-frequency noise
   List<double> _applyLowPassFilter(List<double> samples, {double cutoffFreq = 2000.0}) {
     // First-order low-pass filter (IIR)
-    const dt = 1.0 / sampleRate;
+    // Use the actual detected sample rate so the cutoff frequency is accurate.
+    final dt = 1.0 / _lastDetectedSampleRate;
     final rc = 1.0 / (2.0 * math.pi * cutoffFreq);
     final alpha = dt / (rc + dt);
 
