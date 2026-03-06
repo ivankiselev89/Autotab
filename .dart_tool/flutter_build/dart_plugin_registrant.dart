@@ -6,17 +6,17 @@
 // @dart = 3.0
 
 import 'dart:io'; // flutter_ignore: dart_io_import.
-import 'package:path_provider_android/path_provider_android.dart' as path_provider_android;
-import 'package:url_launcher_android/url_launcher_android.dart' as url_launcher_android;
-import 'package:path_provider_foundation/path_provider_foundation.dart' as path_provider_foundation;
-import 'package:url_launcher_ios/url_launcher_ios.dart' as url_launcher_ios;
-import 'package:path_provider_linux/path_provider_linux.dart' as path_provider_linux;
-import 'package:record_linux/record_linux.dart' as record_linux;
-import 'package:url_launcher_linux/url_launcher_linux.dart' as url_launcher_linux;
-import 'package:path_provider_foundation/path_provider_foundation.dart' as path_provider_foundation;
-import 'package:url_launcher_macos/url_launcher_macos.dart' as url_launcher_macos;
-import 'package:path_provider_windows/path_provider_windows.dart' as path_provider_windows;
-import 'package:url_launcher_windows/url_launcher_windows.dart' as url_launcher_windows;
+import 'package:path_provider_android/path_provider_android.dart';
+import 'package:url_launcher_android/url_launcher_android.dart';
+import 'package:path_provider_foundation/path_provider_foundation.dart';
+import 'package:url_launcher_ios/url_launcher_ios.dart';
+import 'package:path_provider_linux/path_provider_linux.dart';
+import 'package:record_linux/record_linux.dart';
+import 'package:url_launcher_linux/url_launcher_linux.dart';
+import 'package:path_provider_foundation/path_provider_foundation.dart';
+import 'package:url_launcher_macos/url_launcher_macos.dart';
+import 'package:path_provider_windows/path_provider_windows.dart';
+import 'package:url_launcher_windows/url_launcher_windows.dart';
 
 @pragma('vm:entry-point')
 class _PluginRegistrant {
@@ -25,7 +25,7 @@ class _PluginRegistrant {
   static void register() {
     if (Platform.isAndroid) {
       try {
-        path_provider_android.PathProviderAndroid.registerWith();
+        PathProviderAndroid.registerWith();
       } catch (err) {
         print(
           '`path_provider_android` threw an error: $err. '
@@ -34,7 +34,7 @@ class _PluginRegistrant {
       }
 
       try {
-        url_launcher_android.UrlLauncherAndroid.registerWith();
+        UrlLauncherAndroid.registerWith();
       } catch (err) {
         print(
           '`url_launcher_android` threw an error: $err. '
@@ -44,7 +44,7 @@ class _PluginRegistrant {
 
     } else if (Platform.isIOS) {
       try {
-        path_provider_foundation.PathProviderFoundation.registerWith();
+        PathProviderFoundation.registerWith();
       } catch (err) {
         print(
           '`path_provider_foundation` threw an error: $err. '
@@ -53,7 +53,7 @@ class _PluginRegistrant {
       }
 
       try {
-        url_launcher_ios.UrlLauncherIOS.registerWith();
+        UrlLauncherIOS.registerWith();
       } catch (err) {
         print(
           '`url_launcher_ios` threw an error: $err. '
@@ -63,7 +63,7 @@ class _PluginRegistrant {
 
     } else if (Platform.isLinux) {
       try {
-        path_provider_linux.PathProviderLinux.registerWith();
+        PathProviderLinux.registerWith();
       } catch (err) {
         print(
           '`path_provider_linux` threw an error: $err. '
@@ -72,7 +72,7 @@ class _PluginRegistrant {
       }
 
       try {
-        record_linux.RecordLinux.registerWith();
+        RecordLinux.registerWith();
       } catch (err) {
         print(
           '`record_linux` threw an error: $err. '
@@ -81,7 +81,7 @@ class _PluginRegistrant {
       }
 
       try {
-        url_launcher_linux.UrlLauncherLinux.registerWith();
+        UrlLauncherLinux.registerWith();
       } catch (err) {
         print(
           '`url_launcher_linux` threw an error: $err. '
@@ -91,7 +91,7 @@ class _PluginRegistrant {
 
     } else if (Platform.isMacOS) {
       try {
-        path_provider_foundation.PathProviderFoundation.registerWith();
+        PathProviderFoundation.registerWith();
       } catch (err) {
         print(
           '`path_provider_foundation` threw an error: $err. '
@@ -100,7 +100,7 @@ class _PluginRegistrant {
       }
 
       try {
-        url_launcher_macos.UrlLauncherMacOS.registerWith();
+        UrlLauncherMacOS.registerWith();
       } catch (err) {
         print(
           '`url_launcher_macos` threw an error: $err. '
@@ -110,7 +110,7 @@ class _PluginRegistrant {
 
     } else if (Platform.isWindows) {
       try {
-        path_provider_windows.PathProviderWindows.registerWith();
+        PathProviderWindows.registerWith();
       } catch (err) {
         print(
           '`path_provider_windows` threw an error: $err. '
@@ -119,7 +119,7 @@ class _PluginRegistrant {
       }
 
       try {
-        url_launcher_windows.UrlLauncherWindows.registerWith();
+        UrlLauncherWindows.registerWith();
       } catch (err) {
         print(
           '`url_launcher_windows` threw an error: $err. '

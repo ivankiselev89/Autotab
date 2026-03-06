@@ -62,13 +62,12 @@ class NoteSegmentationService {
         continue;
       }
       
-      // For pitch detection, use a centered window within the segment to
-      // analyze the stable sustain portion rather than the transient attack.
-      // This gives more reliable pitch estimates for notes with slow attacks.
+      // For pitch detection, prefer the early-sustain region of the segment
+      // (skip ~20 ms of attack transient, then use up to maxPitchSamples).
+      // This gives more reliable pitch estimates than the decaying tail.
       if (segment.length > maxPitchSamples) {
-        final center = segment.length ~/ 2;
-        final halfWindow = maxPitchSamples ~/ 2;
-        final start = math.max(0, center - halfWindow);
+        final attackSkip = math.min((0.020 * sampleRate).round(), segment.length ~/ 4);
+        final start = attackSkip;
         final end = math.min(segment.length, start + maxPitchSamples);
         segment = segment.sublist(start, end);
       }
@@ -96,8 +95,8 @@ class NoteSegmentationService {
           ));
         }
       } else {
-        // Fall back to monophonic YIN pitch detection.
-        final frequency = _pitchDetection.detectPitch(
+        // Fall back to monophonic YIN pitch detection with multi-window voting.
+        final frequency = _detectPitchWithVoting(
           segment,
           sampleRate: sampleRate.toInt(),
           minFrequency: minFreq,
@@ -121,7 +120,98 @@ class NoteSegmentationService {
       }
     }
     
-    return notes;
+    return _limitConsecutiveRepeats(notes);
+  }
+
+  /// Run YIN on up to three overlapping sub-windows of [segment] and return
+  /// the most frequently occurring fundamental frequency (median by MIDI note).
+  /// Requiring agreement from multiple windows greatly reduces octave errors
+  /// and spurious detections from transients.
+  double _detectPitchWithVoting(
+    List<double> segment, {
+    required int sampleRate,
+    required double minFrequency,
+    required double maxFrequency,
+  }) {
+    final winSize = math.min(maxPitchSamples, segment.length);
+    if (winSize < 512) {
+      return _pitchDetection.detectPitch(
+        segment,
+        sampleRate: sampleRate,
+        minFrequency: minFrequency,
+        maxFrequency: maxFrequency,
+      );
+    }
+
+    // Sample up to 3 positions within the segment: near start, middle, near end.
+    final positions = <int>[];
+    positions.add(0);
+    if (segment.length > winSize) {
+      positions.add((segment.length - winSize) ~/ 2);
+      positions.add(segment.length - winSize);
+    }
+
+    final freqs = <double>[];
+    for (final pos in positions) {
+      final end = math.min(pos + winSize, segment.length);
+      final window = segment.sublist(pos, end);
+      final f = _pitchDetection.detectPitch(
+        window,
+        sampleRate: sampleRate,
+        minFrequency: minFrequency,
+        maxFrequency: maxFrequency,
+      );
+      if (f > 0) freqs.add(f);
+    }
+
+    if (freqs.isEmpty) return 0.0;
+    if (freqs.length == 1) return freqs[0];
+
+    // Convert to MIDI note numbers (round to nearest semitone) and find
+    // the most common.  In case of a tie, return the median frequency.
+    const double a4 = 440.0;
+    const int a4Midi = 69;
+    int toMidi(double f) =>
+        (12 * (math.log(f / a4) / math.log(2)) + a4Midi).round();
+
+    final midiNotes = freqs.map(toMidi).toList();
+    // Count occurrences of each MIDI value.
+    final counts = <int, int>{};
+    for (final m in midiNotes) {
+      counts[m] = (counts[m] ?? 0) + 1;
+    }
+    final bestMidi =
+        counts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+
+    // Collect all frequencies that map to the winning MIDI note and average.
+    final winners = freqs
+        .where((f) => toMidi(f) == bestMidi)
+        .toList();
+    return winners.reduce((a, b) => a + b) / winners.length;
+  }
+
+  /// Cap runs of the same note name+octave to at most [maxRun] consecutive
+  /// occurrences.  This removes the long tails of spurious re-detections
+  /// caused by over-segmentation of a single sustained note while still
+  /// keeping genuine repeated events (e.g. A1 A1 A2 A2 A1 A1 …).
+  List<Note> _limitConsecutiveRepeats(List<Note> notes, {int maxRun = 2}) {
+    if (notes.isEmpty) return notes;
+    final result = <Note>[];
+    int runCount = 0;
+    String? lastKey;
+    for (final note in notes) {
+      final key = '${note.noteName}${note.octave}';
+      if (key == lastKey) {
+        runCount++;
+      } else {
+        runCount = 1;
+        lastKey = key;
+      }
+      if (runCount <= maxRun) {
+        result.add(note);
+      }
+    }
+    return result;
   }
   
   /// Returns [minFreq, maxFreq] for the given instrument.
@@ -261,7 +351,7 @@ class NoteSegmentationService {
     }
 
     // --- Merge both onset sets ---
-    final minGapSamples = (0.08 * sampleRate).round();
+    final minGapSamples = (0.12 * sampleRate).round();
     final allOnsets = <int>{...energyOnsets, ...spectralFluxOnsets}.toList()
       ..sort();
 
