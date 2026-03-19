@@ -1,6 +1,5 @@
 import '../models/note.dart';
 import 'pitch_detection.dart';
-import 'fft_utils.dart';
 import 'dart:math' as math;
 
 class NoteSegmentationService {
@@ -74,27 +73,6 @@ class NoteSegmentationService {
         segment = segment.sublist(start, end);
       }
 
-      final confidence = _calculateConfidence(segment);
-
-      // Sensitivity-dependent minimum confidence to reject noise.
-      double minConfidence;
-      switch (sensitivity.toLowerCase()) {
-        case 'low':
-          minConfidence = 0.10;
-          break;
-        case 'medium':
-          minConfidence = 0.05;
-          break;
-        case 'high':
-        default:
-          minConfidence = 0.02;
-          break;
-      }
-
-      if (confidence < minConfidence) {
-        continue;
-      }
-
       // Try multi-pitch (chord) detection first.
       final chordFrequencies = _detectChordFrequencies(
         segment,
@@ -102,6 +80,13 @@ class NoteSegmentationService {
         minFreq: minFreq,
         maxFreq: maxFreq,
       );
+
+      final confidence = _calculateConfidence(segment);
+
+      // Skip segments with very low confidence (likely noise or silence).
+      if (confidence < 0.01) {
+        continue;
+      }
 
       if (chordFrequencies.isNotEmpty) {
         for (final freq in chordFrequencies) {
@@ -116,33 +101,27 @@ class NoteSegmentationService {
           ));
         }
       } else {
-        // Combined YIN + HPS monophonic detection (Rocksmith-inspired).
-        final pitchResult = _pitchDetection.detectPitchCombined(
+        // Fall back to monophonic YIN pitch detection.
+        final frequency = _pitchDetection.detectPitch(
           segment,
           sampleRate: sampleRate.toInt(),
           minFrequency: minFreq,
           maxFrequency: maxFreq,
         );
-
-        if (pitchResult.frequency == 0.0) {
+        
+        if (frequency == 0.0) {
           continue;
         }
-
-        // Combine segment confidence with pitch detection confidence.
-        final combinedConfidence = confidence * pitchResult.confidence;
-        if (combinedConfidence < minConfidence) {
-          continue;
-        }
-
-        final noteInfo = _frequencyToNote(pitchResult.frequency);
-
+        
+        final noteInfo = _frequencyToNote(frequency);
+        
         notes.add(Note(
-          frequency: pitchResult.frequency.round(),
+          frequency: frequency.round(),
           noteName: noteInfo['name']!,
           octave: int.parse(noteInfo['octave']!),
           startTime: startSample / sampleRate,
           endTime: endSample / sampleRate,
-          confidence: combinedConfidence,
+          confidence: confidence,
         ));
       }
     }
@@ -393,9 +372,23 @@ class NoteSegmentationService {
     return merged;
   }
 
-  /// Computes half-spectrum magnitudes using FFT (O(N log N)).
+  /// Computes half-spectrum magnitudes using a DFT on the given frame.
   List<double> _computeMagnitudeSpectrum(List<double> frame) {
-    return FFTUtils.magnitudeSpectrum(frame);
+    final n = frame.length;
+    final half = n ~/ 2;
+    final magnitudes = List<double>.filled(half, 0.0);
+    for (int k = 0; k < half; k++) {
+      double real = 0.0;
+      double imag = 0.0;
+      final twoPiKOverN = 2.0 * math.pi * k / n;
+      for (int t = 0; t < n; t++) {
+        final angle = twoPiKOverN * t;
+        real += frame[t] * math.cos(angle);
+        imag -= frame[t] * math.sin(angle);
+      }
+      magnitudes[k] = math.sqrt(real * real + imag * imag);
+    }
+    return magnitudes;
   }
   
   /// Calculates the energy (RMS) of a signal frame
@@ -408,21 +401,10 @@ class NoteSegmentationService {
     return math.sqrt(sum / frame.length);
   }
   
-  /// Calculates confidence score combining signal strength and tonality.
-  ///
-  /// Uses both RMS energy and spectral flatness so that noisy segments
-  /// (which have a flat spectrum) receive low confidence even when they
-  /// are loud.
+  /// Calculates confidence score based on signal strength (0.0 to 1.0)
   double _calculateConfidence(List<double> segment) {
     final energy = _calculateEnergy(segment);
-    final energyConf = math.min(energy * 2.0, 1.0);
-
-    // Spectral flatness: close to 0 = tonal, close to 1 = noise.
-    final magnitudes = FFTUtils.magnitudeSpectrum(segment);
-    final flatness = FFTUtils.spectralFlatness(magnitudes);
-    final tonality = 1.0 - flatness;
-
-    return energyConf * tonality;
+    return math.min(energy * 2.0, 1.0);
   }
 
   /// Detect simultaneous fundamental frequencies (chord support) using a
@@ -445,11 +427,19 @@ class NoteSegmentationService {
       return segment[n] * w;
     });
 
-    // Use FFT (O(N log N)) instead of naive DFT (O(N²)).
-    final fftSizeOut = <int>[];
-    final magnitudes =
-        FFTUtils.magnitudeSpectrum(windowed, fftSizeOut: fftSizeOut);
-    final fftSize = fftSizeOut[0];
+    final half = length ~/ 2;
+    final magnitudes = List<double>.filled(half, 0.0);
+
+    for (int k = 0; k < half; k++) {
+      double real = 0.0;
+      double imag = 0.0;
+      final twoPiKOverN = 2.0 * math.pi * k / length;
+      for (int n = 0; n < length; n++) {
+        real += windowed[n] * math.cos(twoPiKOverN * n);
+        imag -= windowed[n] * math.sin(twoPiKOverN * n);
+      }
+      magnitudes[k] = math.sqrt(real * real + imag * imag);
+    }
 
     final maxMag = magnitudes.fold<double>(0.0, (m, v) => v > m ? v : m);
     if (maxMag <= 0.0) return [];
@@ -458,9 +448,8 @@ class NoteSegmentationService {
     // Use a lower relative threshold (10%) so that fundamentals are not
     // missed when their harmonics dominate the spectrum.
     final candidates = <Map<String, double>>[];
-    final half = magnitudes.length;
     for (int k = 1; k < half - 1; k++) {
-      final freq = k * sampleRate / fftSize;
+      final freq = k * sampleRate / length;
       if (freq < minFreq || freq > maxFreq) continue;
 
       final mag = magnitudes[k];
