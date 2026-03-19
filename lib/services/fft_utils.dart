@@ -7,6 +7,14 @@ import 'dart:math' as math;
 /// robust fundamental-frequency detection (Rocksmith-style) and spectral
 /// flatness for noise vs. pitched-signal discrimination.
 class FFTUtils {
+  // Floor value used in log-domain when a magnitude bin is effectively zero.
+  // Equivalent to log(1e-10) ≈ -23.03.
+  static const double _logFloor = -23.0;
+
+  // Divisor used to normalise the HPS peak-above-median gap into a 0–1
+  // confidence score.  Chosen empirically so that clean single-instrument
+  // signals score close to 1.0.
+  static const double _hpsConfidenceScale = 20.0;
   /// Returns the smallest power of 2 that is >= [n].
   static int nextPowerOf2(int n) {
     int p = 1;
@@ -155,7 +163,7 @@ class FFTUtils {
       double logSum = 0.0;
       for (int h = 1; h <= harmonics; h++) {
         final mag = magnitudes[k * h];
-        logSum += mag > 1e-10 ? math.log(mag) : -23.0;
+        logSum += mag > 1e-10 ? math.log(mag) : _logFloor;
       }
       hps[k] = logSum;
     }
@@ -183,7 +191,7 @@ class FFTUtils {
     final sortedSlice = List<double>.from(hps.sublist(minBin, maxBin + 1))
       ..sort();
     final median = sortedSlice[sortedSlice.length ~/ 2];
-    final confidence = ((bestValue - median) / 20.0).clamp(0.0, 1.0);
+    final confidence = ((bestValue - median) / _hpsConfidenceScale).clamp(0.0, 1.0);
 
     if (confidence < 0.05) {
       return {'frequency': 0.0, 'confidence': 0.0};
