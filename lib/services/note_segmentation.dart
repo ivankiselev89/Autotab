@@ -1,6 +1,7 @@
 import '../models/note.dart';
 import 'pitch_detection.dart';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 class NoteSegmentationService {
   final PitchDetectionService _pitchDetection = PitchDetectionService();
@@ -13,6 +14,12 @@ class NoteSegmentationService {
   static const int maxPitchSamples = 8192;
   
   /// Segments continuous audio into individual notes with timing and frequency information.
+  ///
+  /// Uses a Rocksmith-inspired approach:
+  /// 1. Onset detection splits audio into candidate segments
+  /// 2. YIN pitch detection with confidence scoring rejects non-periodic content
+  /// 3. FFT spectral validation confirms the YIN result is the dominant frequency
+  /// 4. Post-processing merges and cleans results
   List<Note> segmentAudio(
     List<double> audioData, {
     double sampleRate = 44100.0,
@@ -27,6 +34,23 @@ class NoteSegmentationService {
     final freqRange = _instrumentFrequencyRange(instrument);
     final minFreq = freqRange[0];
     final maxFreq = freqRange[1];
+
+    // Minimum YIN confidence to accept a detected pitch.
+    // Inspired by Rocksmith's approach of requiring high confidence before
+    // committing to a note detection.
+    double minYinConfidence;
+    switch (sensitivity.toLowerCase()) {
+      case 'low':
+        minYinConfidence = 0.82;
+        break;
+      case 'medium':
+        minYinConfidence = 0.70;
+        break;
+      case 'high':
+      default:
+        minYinConfidence = 0.55;
+        break;
+    }
 
     List<Note> notes = [];
     
@@ -73,6 +97,13 @@ class NoteSegmentationService {
         segment = segment.sublist(start, end);
       }
 
+      final energyConfidence = _calculateConfidence(segment);
+
+      // Skip segments with very low energy (likely noise or silence).
+      if (energyConfidence < 0.01) {
+        continue;
+      }
+
       // Try multi-pitch (chord) detection first.
       final chordFrequencies = _detectChordFrequencies(
         segment,
@@ -80,13 +111,6 @@ class NoteSegmentationService {
         minFreq: minFreq,
         maxFreq: maxFreq,
       );
-
-      final confidence = _calculateConfidence(segment);
-
-      // Skip segments with very low confidence (likely noise or silence).
-      if (confidence < 0.01) {
-        continue;
-      }
 
       if (chordFrequencies.isNotEmpty) {
         for (final freq in chordFrequencies) {
@@ -97,31 +121,51 @@ class NoteSegmentationService {
             octave: int.parse(noteInfo['octave']!),
             startTime: startSample / sampleRate,
             endTime: endSample / sampleRate,
-            confidence: confidence,
+            confidence: energyConfidence,
           ));
         }
       } else {
-        // Fall back to monophonic YIN pitch detection.
-        final frequency = _pitchDetection.detectPitch(
+        // Rocksmith-inspired monophonic detection:
+        // Use YIN with confidence scoring and reject low-confidence results.
+        final pitchResult = _pitchDetection.detectPitchWithConfidence(
           segment,
           sampleRate: sampleRate.toInt(),
           minFrequency: minFreq,
           maxFrequency: maxFreq,
         );
         
-        if (frequency == 0.0) {
+        if (pitchResult.frequency == 0.0) {
+          continue;
+        }
+
+        // Gate on YIN confidence – this is the key Rocksmith-inspired filter
+        // that eliminates most false positives from noise, harmonics, and
+        // non-periodic content.
+        if (pitchResult.confidence < minYinConfidence) {
+          continue;
+        }
+
+        // Cross-validate: for borderline confidence, also check that the
+        // frequency is spectrally plausible.  High-confidence detections
+        // bypass this check because YIN is very reliable at high confidence.
+        if (pitchResult.confidence < 0.90 &&
+            !_isFrequencyDominant(segment, pitchResult.frequency, sampleRate, minFreq, maxFreq)) {
           continue;
         }
         
-        final noteInfo = _frequencyToNote(frequency);
+        final noteInfo = _frequencyToNote(pitchResult.frequency);
+        final combinedConfidence = math.min(
+          energyConfidence * pitchResult.confidence * 2.0,
+          1.0,
+        );
         
         notes.add(Note(
-          frequency: frequency.round(),
+          frequency: pitchResult.frequency.round(),
           noteName: noteInfo['name']!,
           octave: int.parse(noteInfo['octave']!),
           startTime: startSample / sampleRate,
           endTime: endSample / sampleRate,
-          confidence: confidence,
+          confidence: combinedConfidence,
         ));
       }
     }
@@ -129,8 +173,92 @@ class NoteSegmentationService {
     return _postProcessNotes(notes);
   }
 
-  /// Merges consecutive identical notes and removes isolated spurious
-  /// detections (e.g. harmonics that flicker for a single segment).
+  /// Validates that [frequency] is the dominant spectral peak (or within one
+  /// semitone of it) in the given [segment].
+  ///
+  /// This acts as a Rocksmith-style cross-check: YIN may lock onto a
+  /// sub-harmonic or harmonic; the FFT spectrum quickly verifies whether
+  /// that frequency is actually the strongest one present.
+  bool _isFrequencyDominant(
+    List<double> segment,
+    double frequency,
+    double sampleRate,
+    double minFreq,
+    double maxFreq,
+  ) {
+    // Use a power-of-two FFT size for efficiency.
+    final fftSize = _nextPowerOfTwo(math.min(segment.length, 4096));
+    if (fftSize < 256) return true; // too short to validate
+
+    // Apply Hann window + zero-pad
+    final real = Float64List(fftSize);
+    final imag = Float64List(fftSize);
+    final len = math.min(segment.length, fftSize);
+    for (int n = 0; n < len; n++) {
+      final w = 0.5 * (1.0 - math.cos(2.0 * math.pi * n / (len - 1)));
+      real[n] = segment[n] * w;
+    }
+
+    _fftInPlace(real, imag);
+
+    // Find the magnitude at the YIN frequency and the global peak in range.
+    final binRes = sampleRate / fftSize;
+    final yinBin = (frequency / binRes).round().clamp(1, fftSize ~/ 2 - 1);
+
+    double yinMag = 0.0;
+    // Search a small neighbourhood around the expected bin to account for
+    // spectral leakage.
+    for (int k = math.max(1, yinBin - 2); k <= math.min(fftSize ~/ 2 - 1, yinBin + 2); k++) {
+      final m = math.sqrt(real[k] * real[k] + imag[k] * imag[k]);
+      if (m > yinMag) yinMag = m;
+    }
+
+    double peakMag = 0.0;
+    final minBin = math.max(1, (minFreq / binRes).floor());
+    final maxBin = math.min(fftSize ~/ 2 - 1, (maxFreq / binRes).ceil());
+    int peakBin = minBin;
+    for (int k = minBin; k <= maxBin; k++) {
+      final m = math.sqrt(real[k] * real[k] + imag[k] * imag[k]);
+      if (m > peakMag) {
+        peakMag = m;
+        peakBin = k;
+      }
+    }
+
+    if (peakMag <= 0) return true;
+
+    // Check if the dominant peak is harmonically related to the YIN
+    // frequency.  Guitar fundamentals are often weaker than their 2nd or 3rd
+    // harmonics, so a harmonic relationship between the peak and the YIN
+    // frequency is sufficient to accept the detection even when the
+    // fundamental itself is spectrally weak.
+    final peakFreq = peakBin * binRes;
+    if (peakFreq > 0 && frequency > 0) {
+      final ratio = peakFreq / frequency;
+      // Check if peak is a harmonic of the YIN frequency
+      final nearestHarmonic = ratio.round();
+      if (nearestHarmonic >= 1 && nearestHarmonic <= 8) {
+        final harmonicError = (ratio - nearestHarmonic).abs();
+        if (harmonicError < 0.15) return true;
+      }
+      // Also check sub-harmonic (YIN frequency is a harmonic of the peak)
+      final invRatio = frequency / peakFreq;
+      final nearestSubHarmonic = invRatio.round();
+      if (nearestSubHarmonic >= 1 && nearestSubHarmonic <= 4) {
+        final subError = (invRatio - nearestSubHarmonic).abs();
+        if (subError < 0.15) return true;
+      }
+    }
+
+    // If no harmonic relationship, require the YIN frequency to have
+    // reasonable spectral energy relative to the peak.
+    if (yinMag < peakMag * 0.20) return false;
+
+    return true;
+  }
+
+  /// Merges consecutive identical notes, removes isolated spurious
+  /// detections, and cleans up short low-confidence artefacts.
   List<Note> _postProcessNotes(List<Note> notes) {
     if (notes.length <= 1) return notes;
 
@@ -140,7 +268,6 @@ class NoteSegmentationService {
       final prev = merged.last;
       final curr = notes[i];
       if (curr.noteName == prev.noteName && curr.octave == prev.octave) {
-        // Extend the previous note to cover the current one.
         prev.endTime = curr.endTime;
         prev.confidence = math.max(prev.confidence, curr.confidence);
       } else {
@@ -150,10 +277,7 @@ class NoteSegmentationService {
 
     if (merged.length <= 2) return merged;
 
-    // Step 2: Remove isolated spurious notes.  A note is "isolated" when it
-    // appears only once, is very short relative to its neighbours, and its
-    // neighbours share the same identity (i.e. the isolated note is a brief
-    // flicker between two occurrences of the real note).
+    // Step 2: Remove isolated spurious notes.
     final cleaned = <Note>[merged.first];
     for (int i = 1; i < merged.length - 1; i++) {
       final prev = merged[i - 1];
@@ -167,14 +291,18 @@ class NoteSegmentationService {
       final neighboursSame =
           prev.noteName == next.noteName && prev.octave == next.octave;
 
-      // If the current note is very short relative to its neighbours and
-      // those neighbours are the same note, this is likely a spurious
-      // harmonic detection – drop it.
       if (neighboursSame &&
           currDuration < 0.15 &&
           currDuration < prevDuration * 0.5 &&
           currDuration < nextDuration * 0.5) {
-        // Drop the spurious note; extend previous to bridge the gap.
+        cleaned.last.endTime = next.startTime;
+        continue;
+      }
+
+      // Drop notes with very low confidence compared to neighbours.
+      if (curr.confidence < prev.confidence * 0.3 &&
+          curr.confidence < next.confidence * 0.3 &&
+          currDuration < 0.2) {
         cleaned.last.endTime = next.startTime;
         continue;
       }
@@ -183,8 +311,7 @@ class NoteSegmentationService {
     }
     cleaned.add(merged.last);
 
-    // Step 3: Merge again after removing spurious notes (neighbours may now
-    // be identical after the gap was bridged).
+    // Step 3: Merge again after cleaning.
     if (cleaned.length <= 1) return cleaned;
     final result = <Note>[cleaned.first];
     for (int i = 1; i < cleaned.length; i++) {
@@ -200,7 +327,7 @@ class NoteSegmentationService {
 
     return result;
   }
-  
+
   /// Returns [minFreq, maxFreq] for the given instrument.
   List<double> _instrumentFrequencyRange(String instrument) {
     switch (instrument.toLowerCase()) {
@@ -276,17 +403,16 @@ class NoteSegmentationService {
       }
     }
 
-    // --- Spectral-flux onset detection ---
-    // Half-wave rectified spectral flux: captures onset of new notes even when
-    // the overall energy does not drop between consecutive notes.
+    // --- Spectral-flux onset detection (using FFT for speed) ---
     final spectralFluxOnsets = <int>[];
     List<double>? prevSpectrum;
     final fluxValues = <double>[];
     final fluxIndices = <int>[];
+    final fftFrameSize = _nextPowerOfTwo(frameSize);
     for (int i = 0; i < audioData.length - frameSize; i += hopSize) {
       final end = math.min(i + frameSize, audioData.length);
       final frame = audioData.sublist(i, end);
-      final spectrum = _computeMagnitudeSpectrum(frame);
+      final spectrum = _computeMagnitudeSpectrumFFT(frame, fftFrameSize);
       if (prevSpectrum != null) {
         double flux = 0.0;
         for (int k = 0; k < spectrum.length && k < prevSpectrum.length; k++) {
@@ -338,8 +464,6 @@ class NoteSegmentationService {
     }
 
     // --- Merge both onset sets ---
-    // Use a sensitivity-dependent minimum gap to avoid over-segmenting
-    // sustained notes into many tiny slices.
     double minGapSeconds;
     switch (sensitivity.toLowerCase()) {
       case 'low':
@@ -372,25 +496,84 @@ class NoteSegmentationService {
     return merged;
   }
 
-  /// Computes half-spectrum magnitudes using a DFT on the given frame.
-  List<double> _computeMagnitudeSpectrum(List<double> frame) {
-    final n = frame.length;
-    final half = n ~/ 2;
+  // ---------------------------------------------------------------------------
+  // FFT implementation (radix-2 Cooley–Tukey, in-place)
+  // ---------------------------------------------------------------------------
+
+  /// Returns the smallest power of two >= [n].
+  static int _nextPowerOfTwo(int n) {
+    int p = 1;
+    while (p < n) {
+      p <<= 1;
+    }
+    return p;
+  }
+
+  /// In-place radix-2 Cooley–Tukey FFT.
+  /// [real] and [imag] must have the same length, which must be a power of two.
+  static void _fftInPlace(Float64List real, Float64List imag) {
+    final n = real.length;
+    if (n <= 1) return;
+
+    // Bit-reversal permutation
+    int j = 0;
+    for (int i = 0; i < n - 1; i++) {
+      if (i < j) {
+        double tr = real[i];
+        real[i] = real[j];
+        real[j] = tr;
+        tr = imag[i];
+        imag[i] = imag[j];
+        imag[j] = tr;
+      }
+      int m = n >> 1;
+      while (m >= 1 && j >= m) {
+        j -= m;
+        m >>= 1;
+      }
+      j += m;
+    }
+
+    // Cooley–Tukey butterfly
+    for (int size = 2; size <= n; size <<= 1) {
+      final halfSize = size >> 1;
+      final tableStep = -2.0 * math.pi / size;
+      for (int i = 0; i < n; i += size) {
+        for (int k = 0; k < halfSize; k++) {
+          final angle = tableStep * k;
+          final wr = math.cos(angle);
+          final wi = math.sin(angle);
+          final evenIdx = i + k;
+          final oddIdx = i + k + halfSize;
+          final tr = wr * real[oddIdx] - wi * imag[oddIdx];
+          final ti = wr * imag[oddIdx] + wi * real[oddIdx];
+          real[oddIdx] = real[evenIdx] - tr;
+          imag[oddIdx] = imag[evenIdx] - ti;
+          real[evenIdx] += tr;
+          imag[evenIdx] += ti;
+        }
+      }
+    }
+  }
+
+  /// Computes half-spectrum magnitudes using FFT.
+  /// The input [frame] is zero-padded to [fftSize] (must be power of two).
+  List<double> _computeMagnitudeSpectrumFFT(List<double> frame, int fftSize) {
+    final real = Float64List(fftSize);
+    final imag = Float64List(fftSize);
+    final len = math.min(frame.length, fftSize);
+    for (int i = 0; i < len; i++) {
+      real[i] = frame[i];
+    }
+    _fftInPlace(real, imag);
+    final half = fftSize ~/ 2;
     final magnitudes = List<double>.filled(half, 0.0);
     for (int k = 0; k < half; k++) {
-      double real = 0.0;
-      double imag = 0.0;
-      final twoPiKOverN = 2.0 * math.pi * k / n;
-      for (int t = 0; t < n; t++) {
-        final angle = twoPiKOverN * t;
-        real += frame[t] * math.cos(angle);
-        imag -= frame[t] * math.sin(angle);
-      }
-      magnitudes[k] = math.sqrt(real * real + imag * imag);
+      magnitudes[k] = math.sqrt(real[k] * real[k] + imag[k] * imag[k]);
     }
     return magnitudes;
   }
-  
+
   /// Calculates the energy (RMS) of a signal frame
   double _calculateEnergy(List<double> frame) {
     if (frame.isEmpty) return 0.0;
@@ -407,8 +590,8 @@ class NoteSegmentationService {
     return math.min(energy * 2.0, 1.0);
   }
 
-  /// Detect simultaneous fundamental frequencies (chord support) using a
-  /// DFT-based spectral peak analysis with harmonic filtering.
+  /// Detect simultaneous fundamental frequencies (chord support) using an
+  /// FFT-based spectral peak analysis with harmonic filtering.
   ///
   /// Returns an empty list when no clear chord structure is found; in that
   /// case the caller should fall back to monophonic YIN detection.
@@ -421,39 +604,37 @@ class NoteSegmentationService {
     final length = math.min(maxPitchSamples, segment.length);
     if (length < 512) return [];
 
-    // Apply a Hann window to reduce spectral leakage
-    final windowed = List<double>.generate(length, (n) {
+    final fftSize = _nextPowerOfTwo(length);
+
+    // Apply a Hann window and zero-pad to fftSize
+    final real = Float64List(fftSize);
+    final imag = Float64List(fftSize);
+    for (int n = 0; n < length; n++) {
       final w = 0.5 * (1.0 - math.cos(2.0 * math.pi * n / (length - 1)));
-      return segment[n] * w;
-    });
+      real[n] = segment[n] * w;
+    }
 
-    final half = length ~/ 2;
+    _fftInPlace(real, imag);
+
+    final half = fftSize ~/ 2;
     final magnitudes = List<double>.filled(half, 0.0);
-
     for (int k = 0; k < half; k++) {
-      double real = 0.0;
-      double imag = 0.0;
-      final twoPiKOverN = 2.0 * math.pi * k / length;
-      for (int n = 0; n < length; n++) {
-        real += windowed[n] * math.cos(twoPiKOverN * n);
-        imag -= windowed[n] * math.sin(twoPiKOverN * n);
-      }
-      magnitudes[k] = math.sqrt(real * real + imag * imag);
+      magnitudes[k] = math.sqrt(real[k] * real[k] + imag[k] * imag[k]);
     }
 
     final maxMag = magnitudes.fold<double>(0.0, (m, v) => v > m ? v : m);
     if (maxMag <= 0.0) return [];
 
     // Collect spectral peaks within the instrument's frequency range.
-    // Use a lower relative threshold (10%) so that fundamentals are not
-    // missed when their harmonics dominate the spectrum.
+    // Require 15% of the global peak (slightly stricter to reduce false chord
+    // detections from harmonic sidebands).
     final candidates = <Map<String, double>>[];
     for (int k = 1; k < half - 1; k++) {
-      final freq = k * sampleRate / length;
+      final freq = k * sampleRate / fftSize;
       if (freq < minFreq || freq > maxFreq) continue;
 
       final mag = magnitudes[k];
-      if (mag <= maxMag * 0.10) continue;
+      if (mag <= maxMag * 0.15) continue;
 
       if (mag > magnitudes[k - 1] && mag >= magnitudes[k + 1]) {
         candidates.add({'freq': freq, 'mag': mag});
