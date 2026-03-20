@@ -263,7 +263,7 @@ class NoteSegmentationService {
     if (notes.length <= 1) return notes;
 
     // Step 1: Merge consecutive notes that have the same name+octave.
-    var merged = <Note>[notes.first];
+    final merged = <Note>[notes.first];
     for (int i = 1; i < notes.length; i++) {
       final prev = merged.last;
       final curr = notes[i];
