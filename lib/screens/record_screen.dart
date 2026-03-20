@@ -8,6 +8,7 @@ import '../services/app_state_provider.dart';
 import '../services/tab_generator.dart';
 import '../services/audio_analysis_service.dart';
 import '../models/note.dart';
+import '../models/detection_params.dart';
 import 'edit_screen.dart';
 import 'export_screen.dart';
 import 'processing_screen.dart';
@@ -29,11 +30,16 @@ class _RecordScreenState extends State<RecordScreen> {
     {'name': 'Banjo', 'icon': Icons.music_note, 'emoji': '🪕'},
   ];
   bool isRecording = false;
+  bool _isStopping = false; // loading state between Stop and ProcessingScreen
+  bool _showAdvancedParams = false; // toggle for advanced parameter sliders
   final AudioService audioService = AudioService();
   final TabGeneratorService tabGenerator = TabGeneratorService();
   final AudioAnalysisService audioAnalysis = AudioAnalysisService();
   double currentAudioLevel = 0.0;
   StreamSubscription<double>? _audioLevelSubscription;
+  
+  // Custom detection params (initialised from the default preset).
+  late DetectionParams _customParams;
   
   // Analysis results
   AnalysisResult? _lastAnalysisResult;
@@ -89,6 +95,7 @@ class _RecordScreenState extends State<RecordScreen> {
       onSelected: (_) {
         setState(() {
           detectionSensitivity = label;
+          _customParams = DetectionParams.fromPreset(label);
         });
 
         // Persist sensitivity choice in global app state if available
@@ -112,8 +119,10 @@ class _RecordScreenState extends State<RecordScreen> {
       if (storedSensitivity.isNotEmpty) {
         detectionSensitivity = storedSensitivity;
       }
+      _customParams = appState.detectionParams;
     } catch (_) {
       // If provider is not available yet, fall back to default
+      _customParams = DetectionParams.fromPreset(detectionSensitivity);
     }
 
     // Listen to audio level stream for visualization
@@ -314,6 +323,37 @@ class _RecordScreenState extends State<RecordScreen> {
                             _buildSensitivityChip('High', 'Capture everything'),
                           ],
                         ),
+                        const SizedBox(height: 8),
+                        // Toggle for advanced sliders
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              _showAdvancedParams = !_showAdvancedParams;
+                            });
+                          },
+                          child: Row(
+                            children: [
+                              Icon(
+                                _showAdvancedParams
+                                    ? Icons.expand_less
+                                    : Icons.expand_more,
+                                color: Colors.grey[500],
+                                size: 20,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _showAdvancedParams
+                                    ? 'Hide advanced parameters'
+                                    : 'Customise parameters',
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (_showAdvancedParams) ..._buildAdvancedParamSliders(),
                       ],
                     ),
                   ),
@@ -364,8 +404,13 @@ class _RecordScreenState extends State<RecordScreen> {
             // Large mobile-friendly record button with gradient
             Center(
               child: GestureDetector(
-                onTap: () async {
+                onTap: _isStopping ? null : () async {
                     if (isRecording) {
+                      // Show loading state while stopping
+                      setState(() {
+                        _isStopping = true;
+                      });
+
                       // Stop recording
                       final savedPath = await audioService.stopRecording();
                       setState(() {
@@ -373,6 +418,7 @@ class _RecordScreenState extends State<RecordScreen> {
                       });
                       
                       if (savedPath == null || !File(savedPath).existsSync()) {
+                        setState(() { _isStopping = false; });
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -400,6 +446,7 @@ class _RecordScreenState extends State<RecordScreen> {
                                   savedPath,
                                   instrument: selectedInstrument,
                                   sensitivity: detectionSensitivity.toLowerCase(),
+                                  params: _customParams,
                                 );
 
                                 if (_lastAnalysisResult != null) {
@@ -479,6 +526,8 @@ class _RecordScreenState extends State<RecordScreen> {
 
                       if (!mounted) return;
 
+                      setState(() { _isStopping = false; });
+
                       // Navigate to export screen after processing completes
                       Navigator.push(
                         context,
@@ -537,13 +586,17 @@ class _RecordScreenState extends State<RecordScreen> {
                   width: MediaQuery.of(context).size.width * 0.85,
                   height: 80,
                   decoration: BoxDecoration(
-                    gradient: isRecording 
+                    gradient: _isStopping
                       ? LinearGradient(
-                          colors: [Colors.grey[800]!, Colors.grey[900]!],
+                          colors: [Colors.grey[700]!, Colors.grey[800]!],
                         )
-                      : LinearGradient(
-                          colors: [Colors.red[600]!, Colors.red[800]!],
-                        ),
+                      : isRecording 
+                        ? LinearGradient(
+                            colors: [Colors.grey[800]!, Colors.grey[900]!],
+                          )
+                        : LinearGradient(
+                            colors: [Colors.red[600]!, Colors.red[800]!],
+                          ),
                     borderRadius: BorderRadius.circular(25),
                     boxShadow: [
                       BoxShadow(
@@ -554,26 +607,50 @@ class _RecordScreenState extends State<RecordScreen> {
                       ),
                     ],
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        isRecording ? Icons.stop_circle : Icons.fiber_manual_record,
-                        size: 40,
-                        color: Colors.white,
+                  child: _isStopping
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          const Text(
+                            'PROCESSING...',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            isRecording ? Icons.stop_circle : Icons.fiber_manual_record,
+                            size: 40,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 16),
+                          Text(
+                            isRecording ? 'STOP & EXPORT' : 'RECORD',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 16),
-                      Text(
-                        isRecording ? 'STOP & EXPORT' : 'RECORD',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 2,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),
@@ -586,6 +663,168 @@ class _RecordScreenState extends State<RecordScreen> {
         ),
       ),
     );
+  }
+
+  /// Builds slider widgets for each advanced detection parameter.
+  List<Widget> _buildAdvancedParamSliders() {
+    Widget slider({
+      required String label,
+      required String tooltip,
+      required double value,
+      required double min,
+      required double max,
+      required int divisions,
+      required ValueChanged<double> onChanged,
+      String Function(double)? format,
+    }) {
+      final fmt = format ?? (v) => v.toStringAsFixed(2);
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                  ),
+                ),
+                Tooltip(
+                  message: tooltip,
+                  child: Icon(Icons.help_outline, size: 14, color: Colors.grey[600]),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  fmt(value),
+                  style: TextStyle(
+                    color: Colors.red[400],
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            SliderTheme(
+              data: SliderThemeData(
+                activeTrackColor: Colors.red[700],
+                inactiveTrackColor: Colors.grey[800],
+                thumbColor: Colors.red[400],
+                overlayColor: Colors.red.withOpacity(0.15),
+                trackHeight: 3,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+              ),
+              child: Slider(
+                value: value.clamp(min, max),
+                min: min,
+                max: max,
+                divisions: divisions,
+                onChanged: onChanged,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    void _updateParam(DetectionParams Function(DetectionParams) updater) {
+      setState(() {
+        _customParams = updater(_customParams);
+      });
+      try {
+        final appState = Provider.of<AppStateProvider>(context, listen: false);
+        appState.setDetectionParams(_customParams);
+      } catch (_) {}
+    }
+
+    return [
+      const SizedBox(height: 8),
+      slider(
+        label: 'Pitch Confidence',
+        tooltip: 'Min YIN confidence to accept a pitch (lower = more permissive)',
+        value: _customParams.minYinConfidence,
+        min: 0.30,
+        max: 0.95,
+        divisions: 65,
+        onChanged: (v) => _updateParam((p) => p.copyWith(minYinConfidence: v)),
+      ),
+      slider(
+        label: 'Min Note Duration (s)',
+        tooltip: 'Segments shorter than this are discarded',
+        value: _customParams.minNoteDuration,
+        min: 0.01,
+        max: 0.10,
+        divisions: 90,
+        format: (v) => '${(v * 1000).round()} ms',
+        onChanged: (v) => _updateParam((p) => p.copyWith(minNoteDuration: v)),
+      ),
+      slider(
+        label: 'Onset Sensitivity',
+        tooltip: 'Energy onset factor (lower = more sensitive)',
+        value: _customParams.onsetFactor,
+        min: 0.3,
+        max: 2.0,
+        divisions: 34,
+        onChanged: (v) => _updateParam((p) => p.copyWith(onsetFactor: v)),
+      ),
+      slider(
+        label: 'Energy Jump',
+        tooltip: 'Energy jump threshold for new note detection',
+        value: _customParams.jumpFactor,
+        min: 1.0,
+        max: 2.5,
+        divisions: 30,
+        onChanged: (v) => _updateParam((p) => p.copyWith(jumpFactor: v)),
+      ),
+      slider(
+        label: 'Spectral Flux',
+        tooltip: 'Spectral flux factor (lower = more sensitive)',
+        value: _customParams.fluxFactor,
+        min: 0.3,
+        max: 3.0,
+        divisions: 54,
+        onChanged: (v) => _updateParam((p) => p.copyWith(fluxFactor: v)),
+      ),
+      slider(
+        label: 'Min Gap (s)',
+        tooltip: 'Minimum gap between onsets',
+        value: _customParams.minGapSeconds,
+        min: 0.03,
+        max: 0.40,
+        divisions: 37,
+        format: (v) => '${(v * 1000).round()} ms',
+        onChanged: (v) => _updateParam((p) => p.copyWith(minGapSeconds: v)),
+      ),
+      slider(
+        label: 'Noise Reduction',
+        tooltip: 'Higher = more noise removed (risk of cutting quiet notes)',
+        value: _customParams.noiseReductionFactor,
+        min: 1.0,
+        max: 3.5,
+        divisions: 50,
+        onChanged: (v) => _updateParam((p) => p.copyWith(noiseReductionFactor: v)),
+      ),
+      slider(
+        label: 'Noise Gate',
+        tooltip: 'Threshold factor for adaptive noise gate (lower = more permissive)',
+        value: _customParams.noiseGateFactor,
+        min: 0.01,
+        max: 0.30,
+        divisions: 29,
+        onChanged: (v) => _updateParam((p) => p.copyWith(noiseGateFactor: v)),
+      ),
+      slider(
+        label: 'Repeat Note Merge Gap (s)',
+        tooltip: 'Max gap for merging same-pitch notes. Lower = better repeated-note detection.',
+        value: _customParams.repeatNoteMergeGap,
+        min: 0.0,
+        max: 0.50,
+        divisions: 50,
+        format: (v) => '${(v * 1000).round()} ms',
+        onChanged: (v) => _updateParam((p) => p.copyWith(repeatNoteMergeGap: v)),
+      ),
+    ];
   }
   
   List<Widget> _buildRecordingVisualization() {
