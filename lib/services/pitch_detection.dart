@@ -1,3 +1,16 @@
+/// Result of a pitch detection operation, carrying both the detected
+/// frequency and a confidence score derived from the YIN algorithm's
+/// cumulative mean normalized difference (CMND) value.
+class PitchResult {
+    final double frequency;
+    /// Confidence in [0.0, 1.0].  Higher is better.  Derived as `1 - d'`
+    /// where d' is the CMND value at the selected lag.
+    final double confidence;
+
+    const PitchResult(this.frequency, this.confidence);
+    const PitchResult.none() : frequency = 0.0, confidence = 0.0;
+}
+
 class PitchDetectionService {
     // Define frequency ranges for different instruments
     static const Map<String, List<double>> frequencyRanges = {
@@ -14,20 +27,36 @@ class PitchDetectionService {
     static const double yinThreshold = 0.12; // Threshold for pitch detection
     static const int defaultSampleRate = 44100;
 
-    /// Detects pitch using the Yin algorithm
-    /// [audioSignal] - The input audio buffer
-    /// [sampleRate] - The sample rate of the audio (default: 44100 Hz)
-    /// [minFrequency] - Minimum detectable frequency in Hz (default: 60 Hz)
-    /// [maxFrequency] - Maximum detectable frequency in Hz (default: 1400 Hz)
-    /// Returns the detected frequency in Hz, or 0.0 if no pitch is detected
+    /// Detects pitch using the Yin algorithm.
+    /// Returns the detected frequency in Hz, or 0.0 if no pitch is detected.
     double detectPitch(
       List<double> audioSignal, {
       int sampleRate = defaultSampleRate,
       double minFrequency = 60.0,
       double maxFrequency = 1400.0,
     }) {
+        return detectPitchWithConfidence(
+          audioSignal,
+          sampleRate: sampleRate,
+          minFrequency: minFrequency,
+          maxFrequency: maxFrequency,
+        ).frequency;
+    }
+
+    /// Detects pitch and returns both the frequency and a confidence score.
+    ///
+    /// The confidence is derived from the YIN CMND value at the detected lag:
+    ///   confidence = 1.0 - d'
+    /// A confidence of 1.0 means a perfectly periodic signal; values below
+    /// ~0.85 are increasingly unreliable.
+    PitchResult detectPitchWithConfidence(
+      List<double> audioSignal, {
+      int sampleRate = defaultSampleRate,
+      double minFrequency = 60.0,
+      double maxFrequency = 1400.0,
+    }) {
         if (audioSignal.isEmpty) {
-            return 0.0;
+            return const PitchResult.none();
         }
 
         final bufferSize = audioSignal.length;
@@ -39,7 +68,7 @@ class PitchDetectionService {
         final maxTau = (sampleRate / minFrequency).floor().clamp(minTau + 1, halfBufferSize - 1);
 
         if (minTau >= maxTau) {
-            return 0.0;
+            return const PitchResult.none();
         }
 
         // Step 1: Calculate the difference function
@@ -53,15 +82,19 @@ class PitchDetectionService {
         final tauEstimate = _absoluteThreshold(yinBuffer, yinThreshold, minTau, maxTau);
 
         if (tauEstimate == -1) {
-            // No pitch detected
-            return 0.0;
+            return const PitchResult.none();
         }
+
+        // Confidence = 1 - CMND value at the chosen lag.
+        final cmndValue = yinBuffer[tauEstimate].clamp(0.0, 1.0);
+        final confidence = 1.0 - cmndValue;
 
         // Step 4: Parabolic interpolation for better precision
         final betterTau = _parabolicInterpolation(yinBuffer, tauEstimate, maxTau);
 
         // Convert tau to frequency
-        return sampleRate / betterTau;
+        final frequency = sampleRate / betterTau;
+        return PitchResult(frequency, confidence);
     }
 
     /// Step 1: Calculate the difference function (only for tau in [minTau, maxTau])
@@ -95,7 +128,11 @@ class PitchDetectionService {
     }
 
     /// Step 3: Find the first local minimum below the threshold in [minTau, maxTau]
-    /// Returns the tau (lag) value, or -1 if no pitch is found
+    /// Returns the tau (lag) value, or -1 if no pitch is found.
+    ///
+    /// Unlike earlier versions, the fallback to the global minimum uses a
+    /// much stricter acceptance criterion (CMND < 0.3 instead of 0.5) to
+    /// reduce false positives from noise or non-periodic content.
     int _absoluteThreshold(List<double> yinBuffer, double threshold, int minTau, int maxTau) {
         for (int tau = minTau; tau <= maxTau; tau++) {
             if (yinBuffer[tau] < threshold) {
@@ -112,8 +149,10 @@ class PitchDetectionService {
                 bestTau = tau;
             }
         }
-        // Accept if the minimum is reasonably low
-        return yinBuffer[bestTau] < 0.5 ? bestTau : -1;
+        // Stricter acceptance: only accept if the global minimum is reasonably
+        // low.  A CMND value of 0.45 still corresponds to a somewhat periodic
+        // signal – anything above is likely noise.
+        return yinBuffer[bestTau] < 0.45 ? bestTau : -1;
     }
 
     /// Step 4: Parabolic interpolation for better frequency resolution
