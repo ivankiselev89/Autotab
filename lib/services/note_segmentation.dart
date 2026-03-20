@@ -1,4 +1,5 @@
 import '../models/note.dart';
+import '../models/detection_params.dart';
 import 'pitch_detection.dart';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -25,10 +26,14 @@ class NoteSegmentationService {
     double sampleRate = 44100.0,
     String sensitivity = 'high',
     String instrument = 'guitar',
+    DetectionParams? params,
   }) {
     if (audioData.isEmpty) {
       return [];
     }
+
+    // Build effective params: explicit object > preset derived from sensitivity
+    final p = params ?? DetectionParams.fromPreset(sensitivity);
     
     // Derive instrument-specific frequency range for pitch detection.
     final freqRange = _instrumentFrequencyRange(instrument);
@@ -36,26 +41,12 @@ class NoteSegmentationService {
     final maxFreq = freqRange[1];
 
     // Minimum YIN confidence to accept a detected pitch.
-    // Inspired by Rocksmith's approach of requiring high confidence before
-    // committing to a note detection.
-    double minYinConfidence;
-    switch (sensitivity.toLowerCase()) {
-      case 'low':
-        minYinConfidence = 0.82;
-        break;
-      case 'medium':
-        minYinConfidence = 0.70;
-        break;
-      case 'high':
-      default:
-        minYinConfidence = 0.55;
-        break;
-    }
+    final minYinConfidence = p.minYinConfidence;
 
     List<Note> notes = [];
     
     // Detect note onsets using a combination of energy and spectral flux.
-    final onsets = _detectOnsets(audioData, sampleRate, sensitivity: sensitivity);
+    final onsets = _detectOnsets(audioData, sampleRate, params: p);
     
     for (int i = 0; i < onsets.length; i++) {
       final startSample = onsets[i];
@@ -66,19 +57,7 @@ class NoteSegmentationService {
       var segment = audioData.sublist(startSample, endSample);
       
       final duration = (endSample - startSample) / sampleRate;
-      double minDuration;
-      switch (sensitivity.toLowerCase()) {
-        case 'low':
-          minDuration = 0.04;
-          break;
-        case 'medium':
-          minDuration = 0.03;
-          break;
-        case 'high':
-        default:
-          minDuration = 0.02;
-          break;
-      }
+      final minDuration = p.minNoteDuration;
       final bool isEdgeSegment = (i == 0 || i == onsets.length - 1);
       final double effectiveMinDuration = isEdgeSegment ? (minDuration * 0.5) : minDuration;
 
@@ -170,7 +149,7 @@ class NoteSegmentationService {
       }
     }
     
-    return _postProcessNotes(notes);
+    return _postProcessNotes(notes, p);
   }
 
   /// Validates that [frequency] is the dominant spectral peak (or within one
@@ -259,15 +238,25 @@ class NoteSegmentationService {
 
   /// Merges consecutive identical notes, removes isolated spurious
   /// detections, and cleans up short low-confidence artefacts.
-  List<Note> _postProcessNotes(List<Note> notes) {
+  ///
+  /// Respects onset boundaries: two same-pitch notes are only merged when
+  /// they are separated by less than [params.repeatNoteMergeGap] seconds,
+  /// which prevents repeated notes (e.g. E|0--0--0) from being swallowed.
+  List<Note> _postProcessNotes(List<Note> notes, DetectionParams params) {
     if (notes.length <= 1) return notes;
 
-    // Step 1: Merge consecutive notes that have the same name+octave.
+    final mergeGap = params.repeatNoteMergeGap;
+
+    // Step 1: Merge consecutive notes that have the same name+octave
+    //         *only* when the gap between them is smaller than mergeGap.
     final merged = <Note>[notes.first];
     for (int i = 1; i < notes.length; i++) {
       final prev = merged.last;
       final curr = notes[i];
-      if (curr.noteName == prev.noteName && curr.octave == prev.octave) {
+      final gap = curr.startTime - prev.endTime;
+      if (curr.noteName == prev.noteName &&
+          curr.octave == prev.octave &&
+          gap < mergeGap) {
         prev.endTime = curr.endTime;
         prev.confidence = math.max(prev.confidence, curr.confidence);
       } else {
@@ -311,13 +300,16 @@ class NoteSegmentationService {
     }
     cleaned.add(merged.last);
 
-    // Step 3: Merge again after cleaning.
+    // Step 3: Merge again after cleaning (still respecting mergeGap).
     if (cleaned.length <= 1) return cleaned;
     final result = <Note>[cleaned.first];
     for (int i = 1; i < cleaned.length; i++) {
       final prev = result.last;
       final curr = cleaned[i];
-      if (curr.noteName == prev.noteName && curr.octave == prev.octave) {
+      final gap = curr.startTime - prev.endTime;
+      if (curr.noteName == prev.noteName &&
+          curr.octave == prev.octave &&
+          gap < mergeGap) {
         prev.endTime = curr.endTime;
         prev.confidence = math.max(prev.confidence, curr.confidence);
       } else {
@@ -349,8 +341,10 @@ class NoteSegmentationService {
   List<int> _detectOnsets(
     List<double> audioData,
     double sampleRate, {
-    String sensitivity = 'high',
+    DetectionParams? params,
   }) {
+    final p = params ?? DetectionParams.high();
+
     // --- Energy-based onset detection ---
     final energies = <double>[];
     for (int i = 0; i < audioData.length - frameSize; i += hopSize) {
@@ -362,40 +356,14 @@ class NoteSegmentationService {
     if (energies.isEmpty) return [0];
 
     final meanEnergy = energies.reduce((a, b) => a + b) / energies.length;
-    double onsetFactor;
-    switch (sensitivity.toLowerCase()) {
-      case 'low':
-        onsetFactor = 1.4;
-        break;
-      case 'medium':
-        onsetFactor = 1.0;
-        break;
-      case 'high':
-      default:
-        onsetFactor = 0.7;
-        break;
-    }
-    final energyThreshold = meanEnergy * 0.05 * onsetFactor;
+    final energyThreshold = meanEnergy * 0.05 * p.onsetFactor;
 
     final energyOnsets = <int>[];
     bool inNote = false;
-    double jumpFactor;
-    switch (sensitivity.toLowerCase()) {
-      case 'low':
-        jumpFactor = 1.6;
-        break;
-      case 'medium':
-        jumpFactor = 1.3;
-        break;
-      case 'high':
-      default:
-        jumpFactor = 1.15;
-        break;
-    }
     for (int i = 1; i < energies.length; i++) {
       final curr = energies[i];
       final prev = energies[i - 1];
-      if (!inNote && curr > energyThreshold && curr > prev * jumpFactor) {
+      if (!inNote && curr > energyThreshold && curr > prev * p.jumpFactor) {
         energyOnsets.add(i * hopSize);
         inNote = true;
       } else if (inNote && curr < energyThreshold * 0.5) {
@@ -429,19 +397,6 @@ class NoteSegmentationService {
       final maxFlux = fluxValues.reduce(math.max);
       if (maxFlux > 0) {
         final localWindow = (0.5 * sampleRate / hopSize).round().clamp(5, 40);
-        double fluxFactor;
-        switch (sensitivity.toLowerCase()) {
-          case 'low':
-            fluxFactor = 2.0;
-            break;
-          case 'medium':
-            fluxFactor = 1.2;
-            break;
-          case 'high':
-          default:
-            fluxFactor = 0.7;
-            break;
-        }
 
         for (int i = 1; i < fluxValues.length - 1; i++) {
           final winStart = math.max(0, i - localWindow);
@@ -452,7 +407,7 @@ class NoteSegmentationService {
           }
           localMean /= (winEnd - winStart);
 
-          final localThreshold = localMean * fluxFactor + maxFlux * 0.02;
+          final localThreshold = localMean * p.fluxFactor + maxFlux * 0.02;
 
           if (fluxValues[i] > localThreshold &&
               fluxValues[i] >= fluxValues[i - 1] &&
@@ -464,20 +419,7 @@ class NoteSegmentationService {
     }
 
     // --- Merge both onset sets ---
-    double minGapSeconds;
-    switch (sensitivity.toLowerCase()) {
-      case 'low':
-        minGapSeconds = 0.20;
-        break;
-      case 'medium':
-        minGapSeconds = 0.14;
-        break;
-      case 'high':
-      default:
-        minGapSeconds = 0.10;
-        break;
-    }
-    final minGapSamples = (minGapSeconds * sampleRate).round();
+    final minGapSamples = (p.minGapSeconds * sampleRate).round();
     final allOnsets = <int>{...energyOnsets, ...spectralFluxOnsets}.toList()
       ..sort();
 

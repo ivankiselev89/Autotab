@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/note.dart';
+import '../models/detection_params.dart';
 
 class AppStateProvider extends ChangeNotifier {
   Map<String, dynamic> _settings = {};
@@ -12,11 +13,15 @@ class AppStateProvider extends ChangeNotifier {
   final Map<String, String> _transcriptionInstruments = {};
   List<Note> _currentNotes = [];
 
+  // Custom detection parameters (initialised from the default preset).
+  DetectionParams _detectionParams = DetectionParams.high();
+
   Map<String, dynamic> get settings => _settings;
   List<String> get transcriptions => _transcriptions;
   String get currentTranscription => _currentTranscription;
   List<Note> get currentNotes => _currentNotes;
   String get currentInstrument => _currentInstrument;
+  DetectionParams get detectionParams => _detectionParams;
   
   // Get stored instrument for a specific transcription, defaulting to Guitar
   String getInstrumentForTranscription(String transcription) {
@@ -42,6 +47,14 @@ class AppStateProvider extends ChangeNotifier {
       ..._settings,
       'detectionSensitivity': value,
     };
+    // Reset custom params to the selected preset.
+    _detectionParams = DetectionParams.fromPreset(value);
+    notifyListeners();
+  }
+
+  /// Replace the full set of detection parameters (used for per-slider edits).
+  void setDetectionParams(DetectionParams params) {
+    _detectionParams = params;
     notifyListeners();
   }
 

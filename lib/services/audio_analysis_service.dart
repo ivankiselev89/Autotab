@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 import '../models/note.dart';
+import '../models/detection_params.dart';
 import 'note_segmentation.dart';
 
 /// True audio analysis service with noise suppression and pitch detection
@@ -30,6 +31,7 @@ class AudioAnalysisService {
     String wavFilePath, {
     String instrument = 'Guitar',
     String sensitivity = 'high',
+    DetectionParams? params,
   }) async {
     print('=== AUDIO ANALYSIS START ===');
     print('File path: $wavFilePath');
@@ -77,8 +79,11 @@ class AudioAnalysisService {
     print('Using sample rate $effectiveSampleRate Hz for analysis');
 
     // Step 2: Apply aggressive noise suppression with instrument-specific filtering
+    // Build effective detection params.
+    final effectiveParams = params ?? DetectionParams.fromPreset(sensitivity);
+
     print('Step 2: Applying professional-grade noise suppression...');
-    final cleanedAudio = _applyAdvancedNoiseSupression(pcmData, instrument, sensitivity: sensitivity);
+    final cleanedAudio = _applyAdvancedNoiseSupression(pcmData, instrument, params: effectiveParams);
     print('Applied noise suppression and instrument filtering');
 
     // Step 3: Segment audio into notes (sensitivity- and instrument-aware)
@@ -87,6 +92,7 @@ class AudioAnalysisService {
       sampleRate: effectiveSampleRate.toDouble(),
       sensitivity: sensitivity,
       instrument: instrument,
+      params: effectiveParams,
     );
 
     print('Detected ${notes.length} notes');
@@ -288,8 +294,10 @@ class AudioAnalysisService {
   /// 3. Instrument-specific band-pass filtering
   /// 4. Adaptive noise gate with RMS-based threshold
   /// 5. Harmonic enhancement for target instrument
-  List<double> _applyAdvancedNoiseSupression(List<double> samples, String instrument, {String sensitivity = 'high'}) {
+  List<double> _applyAdvancedNoiseSupression(List<double> samples, String instrument, {DetectionParams? params}) {
     if (samples.isEmpty) return samples;
+
+    final p = params ?? DetectionParams.high();
 
     print('  - Removing DC offset...');
     // Step 1: Remove DC offset (center signal around zero)
@@ -298,7 +306,7 @@ class AudioAnalysisService {
 
     print('  - Applying spectral subtraction for noise reduction...');
     // Step 2: Spectral subtraction - estimate and remove noise
-    cleaned = _applySpectralNoiseReduction(cleaned, sensitivity: sensitivity);
+    cleaned = _applySpectralNoiseReduction(cleaned, params: p);
 
     print('  - Applying instrument-specific band-pass filter ($instrument)...');
     // Step 3: Apply instrument-specific band-pass filter
@@ -308,7 +316,7 @@ class AudioAnalysisService {
     // Step 4: Apply adaptive noise gate based on signal RMS
     // Use slightly less aggressive gating for low-frequency instruments like bass,
     // and tune threshold by overall sensitivity.
-    cleaned = _applyAdaptiveNoiseGate(cleaned, instrument: instrument, sensitivity: sensitivity);
+    cleaned = _applyAdaptiveNoiseGate(cleaned, instrument: instrument, params: p);
 
     print('  - Enhancing harmonic content...');
     // Step 5: Enhance harmonic content for better pitch detection
@@ -322,7 +330,9 @@ class AudioAnalysisService {
   /// Uses the quietest short segment of the recording as the noise profile
   /// rather than always using the very beginning, which may contain musical
   /// content (e.g. the first plucked note).
-  List<double> _applySpectralNoiseReduction(List<double> samples, {String sensitivity = 'high'}) {
+  List<double> _applySpectralNoiseReduction(List<double> samples, {DetectionParams? params}) {
+    final p = params ?? DetectionParams.high();
+
     // Find the quietest 20ms window across the first quarter of the file to
     // use as a noise reference instead of always taking the very beginning.
     final windowSize = (_lastDetectedSampleRate * 0.02).toInt().clamp(100, 2000);
@@ -339,22 +349,7 @@ class AudioAnalysisService {
 
     final noiseRMS = minWindowRMS.isFinite ? minWindowRMS : 0.0;
 
-    // Tune how aggressively we treat low-level content as noise.
-    double factor;
-    switch (sensitivity.toLowerCase()) {
-      case 'low':
-        factor = 2.3; // more aggressive, cleaner output
-        break;
-      case 'medium':
-        factor = 1.8; // balanced
-        break;
-      case 'high':
-      default:
-        factor = 1.4; // very permissive, keep more detail
-        break;
-    }
-
-    final noiseThreshold = noiseRMS * factor;
+    final noiseThreshold = noiseRMS * p.noiseReductionFactor;
 
     // If the estimated noise floor is very low (essentially silence), skip
     // the spectral subtraction step to avoid incorrectly attenuating quiet
@@ -430,26 +425,11 @@ class AudioAnalysisService {
   /// For low-frequency instruments like bass, we use a less aggressive
   /// threshold so that quieter fundamentals are not mistaken for noise.
   /// Sensitivity further scales how permissive the gate is overall.
-  List<double> _applyAdaptiveNoiseGate(List<double> samples, {String instrument = '', String sensitivity = 'high'}) {
+  List<double> _applyAdaptiveNoiseGate(List<double> samples, {String instrument = '', DetectionParams? params}) {
+    final p = params ?? DetectionParams.high();
     final rms = _calculateRMS(samples);
 
-    // Base factor for most instruments. Lowering this makes the gate
-    // more permissive so that borderline content is kept as potential
-    // notes instead of being zeroed out.
-    double thresholdFactor;
-
-    switch (sensitivity.toLowerCase()) {
-      case 'low':
-        thresholdFactor = 0.15; // stricter, cleaner
-        break;
-      case 'medium':
-        thresholdFactor = 0.10; // balanced
-        break;
-      case 'high':
-      default:
-        thresholdFactor = 0.06; // very permissive
-        break;
-    }
+    double thresholdFactor = p.noiseGateFactor;
 
     switch (instrument.toLowerCase()) {
       case 'bass':
