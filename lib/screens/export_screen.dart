@@ -6,6 +6,10 @@ import '../services/export_service.dart';
 import '../models/note.dart';
 import 'processing_screen.dart';
 
+/// Delimiter used to separate tab-only content from additional details
+/// in the transcription string. Must match the value in record_screen.dart.
+const String _additionalInfoDelimiter = '===ADDITIONAL_INFO===';
+
 class ExportScreen extends StatefulWidget {
   const ExportScreen({super.key});
 
@@ -17,6 +21,23 @@ class _ExportScreenState extends State<ExportScreen> {
   final TextEditingController _textController = TextEditingController();
   final ExportService _exportService = ExportService();
   String? _selectedTranscription;
+  bool _showAdditionalInfo = false;
+
+  /// Returns only the tab portion of the transcription text, stripping
+  /// additional info after the delimiter.
+  String _tabSection(String text) {
+    final idx = text.indexOf(_additionalInfoDelimiter);
+    if (idx < 0) return text;
+    return text.substring(0, idx).trimRight();
+  }
+
+  /// Returns the additional-info portion of the transcription text, or
+  /// empty string if there is none.
+  String _additionalSection(String text) {
+    final idx = text.indexOf(_additionalInfoDelimiter);
+    if (idx < 0) return '';
+    return text.substring(idx + _additionalInfoDelimiter.length).trimLeft();
+  }
 
   @override
   void initState() {
@@ -110,6 +131,7 @@ class _ExportScreenState extends State<ExportScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
+                    // Tab content with horizontal auto-scroll
                     Container(
                       height: 200,
                       decoration: BoxDecoration(
@@ -137,7 +159,7 @@ class _ExportScreenState extends State<ExportScreen> {
                                     child: Padding(
                                       padding: const EdgeInsets.all(12.0),
                                       child: Text(
-                                        _textController.text,
+                                        _tabSection(_textController.text),
                                         style: TextStyle(
                                           fontFamily: 'monospace',
                                           fontSize: 14,
@@ -151,6 +173,68 @@ class _ExportScreenState extends State<ExportScreen> {
                               ),
                             ),
                     ),
+                    // Collapsible additional info section
+                    if (_additionalSection(_textController.text).isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            _showAdditionalInfo = !_showAdditionalInfo;
+                          });
+                        },
+                        child: Row(
+                          children: [
+                            Icon(
+                              _showAdditionalInfo
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              color: Colors.grey[500],
+                              size: 20,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _showAdditionalInfo
+                                  ? 'Hide details (confidence, analysis)'
+                                  : 'Show details (confidence, analysis)',
+                              style: TextStyle(
+                                color: Colors.grey[500],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_showAdditionalInfo)
+                        Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          constraints: const BoxConstraints(maxHeight: 200),
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[800]!),
+                          ),
+                          child: Scrollbar(
+                            thumbVisibility: true,
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: SingleChildScrollView(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12.0),
+                                  child: Text(
+                                    _additionalSection(_textController.text),
+                                    style: TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 12,
+                                      color: Colors.grey[500],
+                                    ),
+                                    softWrap: false,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ],
                 ),
               ),

@@ -25,9 +25,9 @@ class _RecordScreenState extends State<RecordScreen> {
   String detectionSensitivity = 'High'; // High = capture as many notes as possible
   final List<Map<String, dynamic>> instruments = [
     {'name': 'Guitar', 'icon': Icons.music_note, 'emoji': '🎸'},
-    {'name': 'Violin', 'icon': Icons.music_note, 'emoji': '🎻'},
     {'name': 'Bass', 'icon': Icons.music_note, 'emoji': '🎸'},
     {'name': 'Banjo', 'icon': Icons.music_note, 'emoji': '🪕'},
+    {'name': 'Violin', 'icon': Icons.music_note, 'emoji': '🎻'},
   ];
   bool isRecording = false;
   bool _isStopping = false; // loading state between Stop and ProcessingScreen
@@ -317,6 +317,7 @@ class _RecordScreenState extends State<RecordScreen> {
                         const SizedBox(height: 12),
                         Wrap(
                           spacing: 8,
+                          runSpacing: 8,
                           children: [
                             _buildSensitivityChip('Low', 'Cleaner, fewer notes'),
                             _buildSensitivityChip('Medium', 'Balanced'),
@@ -1005,6 +1006,11 @@ class _RecordScreenState extends State<RecordScreen> {
     ];
   }
   
+  // Delimiter used to separate tab-only content from additional details
+  // in the transcription string. UI code splits on this to show additional
+  // info in a collapsible section.
+  static const String additionalInfoDelimiter = '===ADDITIONAL_INFO===';
+
   // Generate a transcription based on true audio analysis
   String _generateTranscription() {
     final now = DateTime.now();
@@ -1021,7 +1027,7 @@ class _RecordScreenState extends State<RecordScreen> {
       analysisMethod = 'Professional Audio Analysis: $selectedInstrument Mode';
       
       final rhythm = _lastAnalysisResult!.rhythm;
-      rhythmInfo = '''\n\nRhythm Analysis:
+      rhythmInfo = '''Rhythm Analysis:
 Tempo: ${rhythm.formattedTempo}
 Time Signature: ${rhythm.timeSignature}
 Beats Detected: ${rhythm.beats.length}
@@ -1066,19 +1072,22 @@ Harmonic Enhancement: Active''';
       ? 'Estimated Tempo: ${_lastAnalysisResult!.rhythm.formattedTempo}\n'
       : '';
 
-    return '''
-  Recording Details:
-  Timestamp: $timestamp
-  Instrument: $selectedInstrument
-  Duration: ${duration.toStringAsFixed(1)}s
-  Notes Detected: ${notesToUse.length}
-  $estimatedTempoLine
-
+    // Primary tab content (always visible)
+    final tabSection = '''
+Recording Details:
+Timestamp: $timestamp
+Instrument: $selectedInstrument
+Duration: ${duration.toStringAsFixed(1)}s
+Notes Detected: ${notesToUse.length}
+$estimatedTempoLine
 Generated Tablature:
 $generatedTab
+''';
 
-$textNotation$rhythmInfo
-
+    // Additional details (collapsed by default in UI)
+    final additionalSection = '''
+$textNotation
+${rhythmInfo.isNotEmpty ? '\n$rhythmInfo\n' : ''}
 Analysis Method: $analysisMethod
 Noise Suppression:
   • Spectral Subtraction (noise profile removal)
@@ -1089,6 +1098,8 @@ Noise Suppression:
 Pitch Detection: Yin Algorithm (autocorrelation-based)
 Format: WAV (uncompressed PCM), 44.1kHz, 16-bit
 ''';
+
+    return '$tabSection$additionalInfoDelimiter\n$additionalSection';
   }
 }
 

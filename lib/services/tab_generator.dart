@@ -36,6 +36,17 @@ class TabGeneratorService {
     98.00,  // G2
   ];
   
+  // 4-string violin in standard tuning (G3 D4 A4 E5)
+  // Internal order is from lowest pitch to highest pitch; rendering
+  // reverses this to show highest string (E) on top.
+  static const List<String> violinStrings = ['G', 'D', 'A', 'E'];
+  static const List<double> violinStringFrequencies = [
+    196.00, // G3
+    293.66, // D4
+    440.00, // A4
+    659.26, // E5
+  ];
+  
   /// Generates a guitar tab from a list of notes.
   /// Returns a formatted string representing guitar tablature.
   String generateTab(List<Note> notes, {String instrument = 'guitar'}) {
@@ -46,6 +57,7 @@ class TabGeneratorService {
     final lowerInstrument = instrument.toLowerCase();
     final isBanjo = lowerInstrument == 'banjo';
     final isBass = lowerInstrument == 'bass' || lowerInstrument == 'bass guitar';
+    final isViolin = lowerInstrument == 'violin';
 
     final List<String> strings;
     final List<double> stringFrequencies;
@@ -56,6 +68,9 @@ class TabGeneratorService {
     } else if (isBass) {
       strings = bassStrings;
       stringFrequencies = bassStringFrequencies;
+    } else if (isViolin) {
+      strings = violinStrings;
+      stringFrequencies = violinStringFrequencies;
     } else {
       strings = guitarStrings;
       stringFrequencies = guitarStringFrequencies;

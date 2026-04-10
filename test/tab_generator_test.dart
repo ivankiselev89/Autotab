@@ -232,5 +232,54 @@ void main() {
       // Check that sharp notes are displayed correctly
       expect(notation, contains('C#4'));
     });
+
+    test('generateTab generates valid violin tab with 4 strings', () {
+      final notes = [
+        Note(
+          frequency: 440, // A4
+          noteName: 'A',
+          octave: 4,
+          startTime: 0.0,
+          endTime: 0.5,
+          confidence: 0.9,
+        ),
+      ];
+
+      final tab = tabGenerator.generateTab(notes, instrument: 'violin');
+
+      // Violin tab should have 4 lines (G D A E from top)
+      final lines = tab.split('\n');
+      expect(lines.length, equals(4));
+
+      // Top line should be highest string E, bottom should be lowest G
+      expect(lines[0], startsWith('E|'));
+      expect(lines[1], startsWith('A|'));
+      expect(lines[2], startsWith('D|'));
+      expect(lines[3], startsWith('G|'));
+
+      // Each line should end with |
+      for (final line in lines) {
+        expect(line, endsWith('|'));
+      }
+    });
+
+    test('generateTab violin A4 on open A string is fret 0', () {
+      final notes = [
+        Note(
+          frequency: 440, // A4 – exactly the open A string
+          noteName: 'A',
+          octave: 4,
+          startTime: 0.0,
+          endTime: 0.5,
+          confidence: 0.95,
+        ),
+      ];
+
+      final tab = tabGenerator.generateTab(notes, instrument: 'violin');
+      final lines = tab.split('\n');
+
+      // The A string line (second from top) should contain fret 0
+      expect(lines[1], contains('0'));
+    });
   });
 }

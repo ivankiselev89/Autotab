@@ -21,6 +21,8 @@ class PitchDetectionService {
         // to capture harmonics used in real recordings.
         'bass': [28.0, 400.0],
         'banjo': [146.8, 1760.0],
+        // Violin (G3–E7). Covers fundamentals and high positions.
+        'violin': [196.0, 3136.0],
     };
 
     // Constants for Yin algorithm
