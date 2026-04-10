@@ -76,22 +76,38 @@ class EditScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.grey[800]!),
                     ),
-                    child: TextField(
-                      controller: controller,
-                      maxLines: null,
-                      expands: true,
-                      textAlignVertical: TextAlignVertical.top,
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 14,
-                        color: Colors.grey[300],
-                      ),
-                      decoration: InputDecoration(
-                        hintText: 'Enter your notes here...',
-                        hintStyle: TextStyle(color: Colors.grey[600]),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.all(16),
-                      ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minWidth: constraints.maxWidth,
+                              minHeight: constraints.maxHeight,
+                              maxHeight: constraints.maxHeight,
+                            ),
+                            child: IntrinsicWidth(
+                              child: TextField(
+                                controller: controller,
+                                maxLines: null,
+                                expands: true,
+                                textAlignVertical: TextAlignVertical.top,
+                                style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 14,
+                                  color: Colors.grey[300],
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Enter your notes here...',
+                                  hintStyle: TextStyle(color: Colors.grey[600]),
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.all(16),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
