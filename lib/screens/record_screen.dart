@@ -25,7 +25,7 @@ class _RecordScreenState extends State<RecordScreen> {
   String detectionSensitivity = 'High'; // High = capture as many notes as possible
   final List<Map<String, dynamic>> instruments = [
     {'name': 'Guitar', 'icon': Icons.music_note, 'emoji': '🎸'},
-    {'name': 'Bass', 'icon': Icons.music_note, 'emoji': '🎸', 'assetIcon': 'assets/images/bass_icon.png'},
+    {'name': 'Bass', 'icon': Icons.music_note, 'assetIcon': 'assets/images/bass_icon.png'},
     {'name': 'Banjo', 'icon': Icons.music_note, 'emoji': '🪕'},
     {'name': 'Violin', 'icon': Icons.music_note, 'emoji': '🎻'},
   ];
@@ -272,6 +272,7 @@ class _RecordScreenState extends State<RecordScreen> {
                                     instrument['assetIcon'] as String,
                                     width: 28,
                                     height: 28,
+                                    semanticLabel: instrument['name'] as String,
                                   )
                                 : Text(
                                     instrument['emoji'] as String,
