@@ -366,27 +366,29 @@ class _RecordScreenState extends State<RecordScreen> {
                 // Recording Status - show only while recording
                 if (isRecording)
                   Container(
-                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
                     decoration: BoxDecoration(
                       color: Colors.red[900]!.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: Colors.red[700]!,
-                        width: 2,
+                        width: 1.5,
                       ),
                     ),
-                    child: Column(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
                           Icons.mic,
-                          size: 80,
+                          size: 18,
                           color: Colors.red[600],
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(width: 8),
                         const Text(
                           'RECORDING...',
                           style: TextStyle(
-                            fontSize: 24,
+                            fontSize: 13,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 2,
                             color: Colors.red,
@@ -395,7 +397,7 @@ class _RecordScreenState extends State<RecordScreen> {
                       ],
                     ),
                   ),
-                if (isRecording) const SizedBox(height: 24),
+                if (isRecording) const SizedBox(height: 8),
 
                 // Audio level visualization (conditional)
                 ..._buildRecordingVisualization(),
